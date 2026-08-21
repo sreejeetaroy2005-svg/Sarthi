@@ -30,6 +30,16 @@ export default function App() {
   const [arMonument, setArMonument] = useState(null);
   const [routeConfig, setRouteConfig] = useState(null); // { origin, destination }
 
+  // App-wide Toast notification state
+  const [toast, setToast] = useState(null); // { message, icon }
+
+  const showToast = (message, icon = 'info') => {
+    setToast({ message, icon });
+    setTimeout(() => {
+      setToast(prev => (prev?.message === message ? null : prev));
+    }, 3000);
+  };
+
   // App Core state (Persistent via LocalStorage)
   const [userProfile, setUserProfile] = useState(() => {
     const saved = localStorage.getItem('sarthi_user_profile');
@@ -106,15 +116,16 @@ export default function App() {
     setUserLocation(location);
     localStorage.setItem('sarthi_onboarded', 'true');
     setStep('dashboard');
+    showToast('Welcome to Delhi Heritage Guide!', 'explore');
   };
 
   const handleAddToDayPlan = (monument) => {
     if (dayPlan.some(p => p.id === monument.id)) {
-      alert(`"${monument.title}" is already in your Day Plan!`);
+      showToast(`"${monument.title}" is already in your Day Plan`, 'info');
       return;
     }
     setDayPlan(prev => [...prev, monument]);
-    alert(`Added "${monument.title}" to your Day Plan!`);
+    showToast(`Added "${monument.title}" to your Day Plan!`, 'add_task');
   };
 
   const handleToggleBookmark = (monument) => {
@@ -129,6 +140,27 @@ export default function App() {
     setSavedMonuments(prev => prev.filter(p => p.id !== id));
   };
 
+  const handleImportItinerary = (itinerary) => {
+    const matchedStops = [];
+    if (itinerary.stopIds) {
+      itinerary.stopIds.forEach(id => {
+        const found = MONUMENTS.find(m => m.id === id);
+        if (found && !dayPlan.some(p => p.id === found.id)) {
+          matchedStops.push(found);
+        }
+      });
+    }
+
+    if (matchedStops.length > 0) {
+      setDayPlan(prev => [...prev, ...matchedStops]);
+      showToast(`Imported ${matchedStops.length} stops from "${itinerary.title}" to Day Plan!`, 'checklist');
+    } else {
+      showToast(`Stops from "${itinerary.title}" are already in your plan!`, 'info');
+    }
+    setSelectedMonument(null);
+    setActiveTab('plan');
+  };
+
   const handleResetOnboarding = () => {
     localStorage.removeItem('sarthi_onboarded');
     localStorage.removeItem('sarthi_day_plan');
@@ -140,6 +172,7 @@ export default function App() {
     setDayPlan([MONUMENTS[0], MONUMENTS[3]]);
     setSavedMonuments([MONUMENTS[1], MONUMENTS[2]]);
     setStep('welcome');
+    showToast('Preferences and data reset successfully.', 'restart_alt');
   };
 
   // Render Onboarding Views
@@ -149,7 +182,13 @@ export default function App() {
 
   // Render active popup overlay screens if triggered
   if (arMonument) {
-    return <LiveGuideView monument={arMonument} onClose={() => setArMonument(null)} />;
+    return (
+      <LiveGuideView 
+        monument={arMonument} 
+        onClose={() => setArMonument(null)} 
+        onShowToast={showToast}
+      />
+    );
   }
 
   if (storyMonument) {
@@ -178,6 +217,19 @@ export default function App() {
   return (
     <div className="min-h-screen bg-background flex flex-col justify-between selection:bg-primary selection:text-on-primary">
       
+      {/* Toast Notification Banner */}
+      {toast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] bg-zinc-900/95 backdrop-blur-md text-white border border-zinc-700 px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-slide-up text-xs font-semibold max-w-sm">
+          <span className="material-symbols-outlined text-secondary text-lg">
+            {toast.icon || 'info'}
+          </span>
+          <span className="flex-grow">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="p-0.5 hover:bg-zinc-800 rounded-full text-zinc-400">
+            <span className="material-symbols-outlined text-xs">close</span>
+          </button>
+        </div>
+      )}
+
       {/* Top Navbar layout (Desktop only) */}
       <Header activeTab={activeTab} setActiveTab={setActiveTab} userProfile={userProfile} />
 
@@ -193,6 +245,10 @@ export default function App() {
             onOpenLiveGuide={(m) => setArMonument(m)}
             onAddToDayPlan={handleAddToDayPlan}
             onOpenStory={(m) => setStoryMonument(m)}
+            isBookmarked={savedMonuments.some(s => s.id === selectedMonument.id)}
+            onToggleBookmark={handleToggleBookmark}
+            isInDayPlan={dayPlan.some(p => p.id === selectedMonument.id)}
+            onShowToast={showToast}
           />
         ) : (
           /* Render Active Dashboard Tabs */
@@ -207,6 +263,10 @@ export default function App() {
                 userLocation={currentCoords}
                 isSimulated={isSimulated}
                 setSimulatedCoords={setSimulatedCoords}
+                savedMonuments={savedMonuments}
+                onToggleBookmark={handleToggleBookmark}
+                dayPlan={dayPlan}
+                onShowToast={showToast}
               />
             )}
             
@@ -224,6 +284,8 @@ export default function App() {
                 savedMonuments={savedMonuments} 
                 onRemoveBookmark={handleRemoveBookmark}
                 onSelectMonument={(m) => setSelectedMonument(m)}
+                onImportItinerary={handleImportItinerary}
+                onShowToast={showToast}
               />
             )}
             
@@ -232,6 +294,7 @@ export default function App() {
                 userProfile={userProfile} 
                 onUpdateProfile={setUserProfile} 
                 onResetOnboarding={handleResetOnboarding}
+                onShowToast={showToast}
               />
             )}
           </>

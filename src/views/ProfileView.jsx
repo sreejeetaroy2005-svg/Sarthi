@@ -1,19 +1,53 @@
 import React, { useState } from 'react';
 
-export default function ProfileView({ userProfile, onUpdateProfile, onResetOnboarding }) {
-  const [offlineDownloads, setOfflineDownloads] = useState(false);
-  const [currentLang, setCurrentLang] = useState(userProfile?.language || 'English');
+export default function ProfileView({ userProfile, onUpdateProfile, onResetOnboarding, onShowToast }) {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [userName, setUserName] = useState(userProfile?.name || 'Aarav Sharma');
+  const [userEmail, setUserEmail] = useState(userProfile?.email || 'aarav.travels@sarthi.ai');
 
   const languages = ['English', 'Hindi', 'French', 'Spanish', 'German'];
+  const themes = ['Light Standard', 'Dark Elegance', 'Heritage Warm'];
+
+  const currentTheme = userProfile?.theme || 'Light Standard';
+  const currentLang = userProfile?.language || 'English';
+  const offlineDownloads = userProfile?.offlineDownloads ?? false;
 
   const handleLanguageChange = (e) => {
     const lang = e.target.value;
-    setCurrentLang(lang);
     onUpdateProfile({ ...userProfile, language: lang });
+    if (onShowToast) onShowToast(`Narration language set to ${lang}`, 'translate');
+  };
+
+  const handleToggleOffline = () => {
+    const next = !offlineDownloads;
+    onUpdateProfile({ ...userProfile, offlineDownloads: next });
+    if (onShowToast) {
+      onShowToast(
+        next ? 'Offline maps & transcripts download enabled' : 'Offline storage disabled',
+        next ? 'download_done' : 'cloud_off'
+      );
+    }
+  };
+
+  const handleCycleTheme = () => {
+    const nextIdx = (themes.indexOf(currentTheme) + 1) % themes.length;
+    const nextTheme = themes[nextIdx];
+    onUpdateProfile({ ...userProfile, theme: nextTheme });
+    if (onShowToast) onShowToast(`Theme switched to ${nextTheme}`, 'palette');
+  };
+
+  const handleSaveProfile = () => {
+    onUpdateProfile({
+      ...userProfile,
+      name: userName,
+      email: userEmail
+    });
+    setIsEditingName(false);
+    if (onShowToast) onShowToast('Profile details updated!', 'check');
   };
 
   return (
-    <div className="min-h-screen bg-background pb-28 pt-4 px-4 max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background pb-28 pt-4 px-4 max-w-4xl mx-auto space-y-6 animate-fade-in">
       
       {/* Profile Header card with status scores */}
       <div className="bg-white rounded-3xl border border-outline-variant/30 p-6 flex flex-col md:flex-row items-center gap-6 shadow-sm">
@@ -26,12 +60,50 @@ export default function ProfileView({ userProfile, onUpdateProfile, onResetOnboa
         </div>
 
         {/* User core description metadata */}
-        <div className="text-center md:text-left flex-grow space-y-1.5">
-          <span className="text-[10px] uppercase font-bold text-secondary bg-secondary-fixed/50 px-2.5 py-1 rounded-md">
-            {userProfile?.level || "Heritage Scholar"}
-          </span>
-          <h2 className="font-display text-2xl font-bold text-primary mt-1">{userProfile?.name || "Aarav Sharma"}</h2>
-          <p className="font-sans text-xs text-outline leading-tight">{userProfile?.email || "aarav.travels@sarthi.ai"}</p>
+        <div className="text-center md:text-left flex-grow space-y-1.5 w-full md:w-auto">
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+            <span className="text-[10px] uppercase font-bold text-secondary bg-secondary-fixed/50 px-2.5 py-1 rounded-md">
+              {userProfile?.level || "Heritage Scholar"}
+            </span>
+            <button
+              onClick={() => setIsEditingName(!isEditingName)}
+              className="text-xs text-outline hover:text-primary flex items-center gap-0.5"
+              title="Edit Profile"
+            >
+              <span className="material-symbols-outlined text-sm">edit</span>
+              <span>{isEditingName ? 'Cancel' : 'Edit'}</span>
+            </button>
+          </div>
+
+          {isEditingName ? (
+            <div className="space-y-2 pt-2">
+              <input
+                type="text"
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+                placeholder="Your Name"
+                className="w-full text-sm font-bold text-primary border border-outline-variant/60 rounded-xl px-3 py-1.5 outline-none focus:ring-1 focus:ring-primary"
+              />
+              <input
+                type="email"
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
+                placeholder="Email Address"
+                className="w-full text-xs text-outline border border-outline-variant/60 rounded-xl px-3 py-1.5 outline-none focus:ring-1 focus:ring-primary"
+              />
+              <button
+                onClick={handleSaveProfile}
+                className="px-4 py-1.5 bg-primary text-on-primary text-xs font-bold rounded-xl shadow-sm hover:bg-primary-container"
+              >
+                Save Changes
+              </button>
+            </div>
+          ) : (
+            <>
+              <h2 className="font-display text-2xl font-bold text-primary mt-1">{userProfile?.name || userName}</h2>
+              <p className="font-sans text-xs text-outline leading-tight">{userProfile?.email || userEmail}</p>
+            </>
+          )}
         </div>
 
         {/* Level XP scoreboard badge */}
@@ -83,7 +155,7 @@ export default function ProfileView({ userProfile, onUpdateProfile, onResetOnboa
             <select
               value={currentLang}
               onChange={handleLanguageChange}
-              className="bg-surface border border-outline-variant/60 rounded-xl px-3 py-1.5 text-xs text-primary font-bold focus:ring-1 focus:ring-primary outline-none"
+              className="bg-surface border border-outline-variant/60 rounded-xl px-3 py-1.5 text-xs text-primary font-bold focus:ring-1 focus:ring-primary outline-none cursor-pointer"
             >
               {languages.map((lang) => (
                 <option key={lang} value={lang}>{lang}</option>
@@ -101,10 +173,11 @@ export default function ProfileView({ userProfile, onUpdateProfile, onResetOnboa
               </div>
             </div>
             <button
-              onClick={() => setOfflineDownloads(!offlineDownloads)}
+              onClick={handleToggleOffline}
               className={`w-12 h-6.5 rounded-full p-1 transition-all duration-300 ${
                 offlineDownloads ? 'bg-primary' : 'bg-outline-variant/50'
               }`}
+              title="Toggle Offline Downloads"
             >
               <div className={`w-4.5 h-4.5 rounded-full bg-white transition-all transform ${
                 offlineDownloads ? 'translate-x-5.5' : 'translate-x-0'
@@ -115,17 +188,18 @@ export default function ProfileView({ userProfile, onUpdateProfile, onResetOnboa
           {/* Dynamic theme switcher layout */}
           <div className="flex justify-between items-center py-2.5">
             <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-primary">contrast</span>
+              <span className="material-symbols-outlined text-primary">palette</span>
               <div>
-                <h4 className="font-sans font-bold text-xs text-on-surface">Display theme</h4>
-                <p className="font-sans text-[10px] text-on-surface-variant">Toggle dark / light display interface styles</p>
+                <h4 className="font-sans font-bold text-xs text-on-surface">Display Theme</h4>
+                <p className="font-sans text-[10px] text-on-surface-variant">Switch UI color scheme and contrast</p>
               </div>
             </div>
             <button 
-              onClick={() => alert("Theme changing dynamically. Default theme matches DESIGN.md tokens.")}
-              className="text-xs font-bold text-primary bg-surface border border-outline-variant/40 px-3.5 py-2 rounded-xl hover:bg-surface-container-low transition-colors"
+              onClick={handleCycleTheme}
+              className="text-xs font-bold text-primary bg-surface border border-outline-variant/40 px-3.5 py-2 rounded-xl hover:bg-surface-container-low transition-all shadow-sm flex items-center gap-1.5"
             >
-              System Defaults
+              <span className="material-symbols-outlined text-sm">sync</span>
+              <span>{currentTheme}</span>
             </button>
           </div>
 
@@ -154,10 +228,10 @@ export default function ProfileView({ userProfile, onUpdateProfile, onResetOnboa
       <div className="bg-white rounded-3xl border border-outline-variant/30 p-5 shadow-sm text-center">
         <button
           onClick={onResetOnboarding}
-          className="text-xs font-bold text-red-600 hover:text-red-800 flex items-center justify-center gap-1 mx-auto hover:underline"
+          className="text-xs font-bold text-red-600 hover:text-red-800 flex items-center justify-center gap-1.5 mx-auto hover:underline p-2 rounded-xl"
         >
           <span className="material-symbols-outlined text-sm font-bold">restart_alt</span>
-          <span>Reset App Onboarding Preferences</span>
+          <span>Reset App Onboarding &amp; Data Preferences</span>
         </button>
       </div>
 

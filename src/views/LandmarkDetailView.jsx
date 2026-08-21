@@ -1,12 +1,64 @@
 import React, { useState } from 'react';
 
-export default function LandmarkDetailView({ monument, onBack, onOpenAudioGuide, onOpenLiveGuide, onAddToDayPlan, onOpenStory }) {
+export default function LandmarkDetailView({ 
+  monument, 
+  onBack, 
+  onOpenAudioGuide, 
+  onOpenLiveGuide, 
+  onAddToDayPlan, 
+  onOpenStory,
+  isBookmarked = false,
+  onToggleBookmark,
+  isInDayPlan = false,
+  onShowToast
+}) {
   const [activeTab, setActiveTab] = useState('overview');
+  const [copiedShare, setCopiedShare] = useState(false);
 
   if (!monument) return null;
 
+  const handleShare = async () => {
+    const shareData = {
+      title: `${monument.title} - Sarthi Cultural Guide`,
+      text: `${monument.title}: ${monument.subtitle}. Explore with Sarthi smart travel guide!`,
+      url: window.location.href
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          // Fallback to clipboard
+        }
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}\n${shareData.url}`);
+      setCopiedShare(true);
+      if (onShowToast) onShowToast('Link copied to clipboard!', 'content_copy');
+      setTimeout(() => setCopiedShare(false), 2500);
+    } catch {
+      if (onShowToast) onShowToast('Unable to share in this browser', 'error');
+    }
+  };
+
+  const handleBookmarkClick = () => {
+    if (onToggleBookmark) {
+      onToggleBookmark(monument);
+      if (onShowToast) {
+        onShowToast(
+          isBookmarked ? `Removed ${monument.title} from Saved` : `Saved ${monument.title} to Bookmarks`,
+          isBookmarked ? 'bookmark_remove' : 'bookmark_added'
+        );
+      }
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-background flex flex-col pb-24 relative">
+    <div className="min-h-screen bg-background flex flex-col pb-24 relative animate-fade-in">
       
       {/* Hero Header Area */}
       <div className="h-[280px] md:h-[400px] w-full relative overflow-hidden bg-primary-container shrink-0">
@@ -17,23 +69,46 @@ export default function LandmarkDetailView({ monument, onBack, onOpenAudioGuide,
         />
         
         {/* Gradients */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/70"></div>
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/75"></div>
 
         {/* Back navigation button */}
         <button 
           onClick={onBack}
-          className="absolute top-4 left-4 p-3 bg-white/20 backdrop-blur-md text-white rounded-full hover:bg-white/35 transition-all shadow-md flex items-center justify-center"
+          className="absolute top-4 left-4 p-3 bg-white/20 backdrop-blur-md text-white rounded-full hover:bg-white/35 transition-all shadow-md flex items-center justify-center transform active:scale-95"
+          title="Back"
         >
           <span className="material-symbols-outlined font-bold text-white">arrow_back</span>
         </button>
 
         {/* Share & Bookmark overlay */}
         <div className="absolute top-4 right-4 flex gap-2">
-          <button className="p-3 bg-white/20 backdrop-blur-md text-white rounded-full hover:bg-white/35 transition-all shadow-md flex items-center justify-center">
-            <span className="material-symbols-outlined text-white">share</span>
+          <button 
+            onClick={handleShare}
+            className={`p-3 backdrop-blur-md rounded-full transition-all shadow-md flex items-center justify-center transform active:scale-95 ${
+              copiedShare ? 'bg-green-600 text-white' : 'bg-white/20 hover:bg-white/35 text-white'
+            }`}
+            title="Share Landmark"
+          >
+            <span className="material-symbols-outlined text-white">
+              {copiedShare ? 'check' : 'share'}
+            </span>
           </button>
-          <button className="p-3 bg-white/20 backdrop-blur-md text-white rounded-full hover:bg-white/35 transition-all shadow-md flex items-center justify-center">
-            <span className="material-symbols-outlined text-white">bookmark</span>
+          
+          <button 
+            onClick={handleBookmarkClick}
+            className={`p-3 backdrop-blur-md rounded-full transition-all shadow-md flex items-center justify-center transform active:scale-95 ${
+              isBookmarked 
+                ? 'bg-secondary text-on-secondary shadow-lg' 
+                : 'bg-white/20 hover:bg-white/35 text-white'
+            }`}
+            title={isBookmarked ? 'Remove Bookmark' : 'Save Monument'}
+          >
+            <span 
+              className="material-symbols-outlined text-white"
+              style={{ fontVariationSettings: isBookmarked ? "'FILL' 1" : "'FILL' 0" }}
+            >
+              {isBookmarked ? 'bookmark' : 'bookmark_border'}
+            </span>
           </button>
         </div>
 
@@ -141,10 +216,10 @@ export default function LandmarkDetailView({ monument, onBack, onOpenAudioGuide,
                     </p>
                     <button 
                       onClick={() => onOpenStory(monument)}
-                      className="text-xs font-bold text-primary hover:text-primary-container flex items-center gap-1 mt-1 self-start"
+                      className="text-xs font-bold text-primary hover:text-primary-container flex items-center gap-1 mt-1 self-start group"
                     >
                       <span>Read Full Editorial Story</span>
-                      <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                      <span className="material-symbols-outlined text-sm transform group-hover:translate-x-1 transition-transform">arrow_forward</span>
                     </button>
                   </div>
                 )}
@@ -194,7 +269,7 @@ export default function LandmarkDetailView({ monument, onBack, onOpenAudioGuide,
         <div className="space-y-5">
           
           {/* Day plan addition panel */}
-          <div className="bg-white rounded-2xl border border-outline-variant/30 p-5 space-y-4">
+          <div className="bg-white rounded-2xl border border-outline-variant/30 p-5 space-y-4 shadow-sm">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-secondary text-xl">event_available</span>
               <h3 className="font-sans font-bold text-primary text-base">Plan this stop</h3>
@@ -206,16 +281,22 @@ export default function LandmarkDetailView({ monument, onBack, onOpenAudioGuide,
             
             <button
               onClick={() => onAddToDayPlan(monument)}
-              className="w-full bg-surface hover:bg-surface-container border border-outline-variant/60 text-primary font-sans font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors transform active:scale-98"
+              className={`w-full font-sans font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 border ${
+                isInDayPlan
+                  ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                  : 'bg-surface hover:bg-surface-container border-outline-variant/60 text-primary'
+              }`}
             >
-              <span className="material-symbols-outlined text-sm font-bold">add</span>
-              <span>Add to Day Plan</span>
+              <span className="material-symbols-outlined text-sm font-bold">
+                {isInDayPlan ? 'check_circle' : 'add'}
+              </span>
+              <span>{isInDayPlan ? 'In Your Day Plan ✓' : 'Add to Day Plan'}</span>
             </button>
           </div>
 
           {/* Dining Section nearby */}
           {monument.nearbyDining && monument.nearbyDining.length > 0 && (
-            <div className="bg-white rounded-2xl border border-outline-variant/30 p-5 space-y-4">
+            <div className="bg-white rounded-2xl border border-outline-variant/30 p-5 space-y-4 shadow-sm">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-amber-600 text-xl">restaurant</span>
                 <h3 className="font-sans font-bold text-primary text-base">Culinary Stops Nearby</h3>

@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
 import { MONUMENTS } from '../data/monuments';
 
-export default function SavedTripsView({ savedMonuments = [], onRemoveBookmark, onSelectMonument }) {
+export default function SavedTripsView({ 
+  savedMonuments = [], 
+  onRemoveBookmark, 
+  onSelectMonument,
+  onImportItinerary,
+  onShowToast
+}) {
   const [activeSubTab, setActiveSubTab] = useState('places');
+  const [copiedItineraryId, setCopiedItineraryId] = useState(null);
 
-  // Static pre-curated cultural routes / itineraries
+  // Static pre-curated cultural routes / itineraries mapped to real monument IDs
   const culturalItineraries = [
     {
       id: 'delhi-mughal',
       title: "Mughal Architecture Tour",
+      stopIds: ['humayun-tomb', 'red-fort', 'safdarjung-tomb'],
       stops: "Humayun's Tomb -> Red Fort -> Safdarjung Tomb",
       duration: "1 Day (6 Hours)",
       difficulty: "Moderate Walking",
@@ -18,6 +26,7 @@ export default function SavedTripsView({ savedMonuments = [], onRemoveBookmark, 
     {
       id: 'delhi-spiritual',
       title: "Delhi Spiritual & Peace Trail",
+      stopIds: ['lotus-temple', 'akshardham-temple', 'nizamuddin-dargah'],
       stops: "Lotus Temple -> Akshardham -> Nizamuddin Dargah",
       duration: "1 Day (8 Hours)",
       difficulty: "Leisurely Pace",
@@ -27,6 +36,7 @@ export default function SavedTripsView({ savedMonuments = [], onRemoveBookmark, 
     {
       id: 'delhi-food',
       title: "Old Delhi Heritage Food Trail",
+      stopIds: ['red-fort', 'humayun-tomb'],
       stops: "Chandni Chowk -> Karim's -> Paranthe Wali Gali",
       duration: "Half-Day (4 Hours)",
       difficulty: "Dense Crowd Navigation",
@@ -35,8 +45,41 @@ export default function SavedTripsView({ savedMonuments = [], onRemoveBookmark, 
     }
   ];
 
+  const handleShareItinerary = async (itinerary) => {
+    const text = `${itinerary.title} (${itinerary.duration}): ${itinerary.desc}\nStops: ${itinerary.stops}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: itinerary.title,
+          text,
+          url: window.location.href
+        });
+        return;
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          // fallback
+        }
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedItineraryId(itinerary.id);
+      if (onShowToast) onShowToast('Itinerary details copied to clipboard!', 'content_copy');
+      setTimeout(() => setCopiedItineraryId(null), 2500);
+    } catch {
+      if (onShowToast) onShowToast('Could not share itinerary', 'error');
+    }
+  };
+
+  const handleImport = (itinerary) => {
+    if (onImportItinerary) {
+      onImportItinerary(itinerary);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-background pb-28 pt-4 px-4 max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background pb-28 pt-4 px-4 max-w-4xl mx-auto space-y-6 animate-fade-in">
       
       {/* Header Title */}
       <div>
@@ -81,9 +124,9 @@ export default function SavedTripsView({ savedMonuments = [], onRemoveBookmark, 
                 >
                   <div 
                     onClick={() => onSelectMonument(place)}
-                    className="h-40 w-full relative overflow-hidden bg-surface-container cursor-pointer"
+                    className="h-40 w-full relative overflow-hidden bg-surface-container cursor-pointer group"
                   >
-                    <img src={place.image} alt={place.title} className="w-full h-full object-cover" />
+                    <img src={place.image} alt={place.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     <div className="absolute top-2 left-2 bg-primary/70 backdrop-blur-sm text-white px-2 py-0.5 rounded text-[8px] font-bold tracking-widest uppercase">
                       {place.category}
                     </div>
@@ -102,8 +145,12 @@ export default function SavedTripsView({ savedMonuments = [], onRemoveBookmark, 
                       </div>
                       
                       <button
-                        onClick={() => onRemoveBookmark(place.id)}
-                        className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-0.5"
+                        onClick={() => {
+                          onRemoveBookmark(place.id);
+                          if (onShowToast) onShowToast(`Removed ${place.title} from Saved`, 'bookmark_remove');
+                        }}
+                        className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-0.5 p-1 rounded hover:bg-red-50 transition-colors"
+                        title="Remove bookmark"
                       >
                         <span className="material-symbols-outlined text-sm">delete</span>
                         <span>Remove</span>
@@ -116,9 +163,9 @@ export default function SavedTripsView({ savedMonuments = [], onRemoveBookmark, 
           ) : (
             <div className="text-center py-20 bg-white border border-outline-variant/30 rounded-3xl space-y-4">
               <span className="material-symbols-outlined text-outline text-5xl">bookmark_border</span>
-              <h3 className="font-sans font-bold text-on-surface text-base">No saved monuments</h3>
+              <h3 className="font-sans font-bold text-on-surface text-base">No saved monuments yet</h3>
               <p className="font-sans text-xs text-on-surface-variant max-w-[260px] mx-auto leading-relaxed">
-                Click bookmark on a monument's detailed review page to save it for easy access later.
+                Click the bookmark icon on any monument card in the Explore or Detail view to save it here.
               </p>
             </div>
           )
@@ -153,16 +200,27 @@ export default function SavedTripsView({ savedMonuments = [], onRemoveBookmark, 
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => alert(`Imported "${itinerary.title}" to your Day Plan!`)}
-                      className="px-4 py-2 bg-primary hover:bg-primary-container text-on-primary text-xs font-bold rounded-lg transition-all shadow-sm flex items-center gap-1"
+                      onClick={() => handleImport(itinerary)}
+                      className="px-4 py-2.5 bg-primary hover:bg-primary-container text-on-primary text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 transform active:scale-95"
                     >
-                      <span className="material-symbols-outlined text-xs">add</span>
+                      <span className="material-symbols-outlined text-sm">add_task</span>
                       <span>Import Route to Day Plan</span>
                     </button>
-                    <button className="p-2 border border-outline-variant/60 rounded-lg hover:bg-surface-container-low transition-colors">
-                      <span className="material-symbols-outlined text-xs">share</span>
+                    
+                    <button 
+                      onClick={() => handleShareItinerary(itinerary)}
+                      className={`p-2.5 border rounded-xl transition-all flex items-center justify-center transform active:scale-95 ${
+                        copiedItineraryId === itinerary.id 
+                          ? 'bg-green-50 text-green-700 border-green-300' 
+                          : 'border-outline-variant/60 hover:bg-surface-container-low text-primary'
+                      }`}
+                      title="Share Itinerary"
+                    >
+                      <span className="material-symbols-outlined text-sm">
+                        {copiedItineraryId === itinerary.id ? 'check' : 'share'}
+                      </span>
                     </button>
                   </div>
                 </div>

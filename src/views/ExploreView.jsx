@@ -10,14 +10,18 @@ export default function ExploreView({
   onOpenAudioGuide,
   userLocation,
   isSimulated,
-  setSimulatedCoords
+  setSimulatedCoords,
+  savedMonuments = [],
+  onToggleBookmark,
+  dayPlan = [],
+  onShowToast
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activePlaces, setActivePlaces] = useState(MONUMENTS);
   const [hoveredMonumentId, setHoveredMonumentId] = useState(null);
   
-  // Custom Map Mock state (Leaflet acts as the main map engine, but we render a responsive fallback svg map structure for offline / instant render)
+  // Custom Map Mock state
   const [mapCenter, setMapCenter] = useState({ lat: 28.5933, lng: 77.2507 }); // Delhi coordinate center
   const mapContainerRef = useRef(null);
   const leafletMapRef = useRef(null);
@@ -166,14 +170,11 @@ export default function ExploreView({
 
   // Leaflet map setup
   useEffect(() => {
-    // Check if Leaflet L is loaded globally or imported
     if (typeof window !== 'undefined' && window.L && mapContainerRef.current) {
-      // Clean up previous map if exists
       if (leafletMapRef.current) {
         leafletMapRef.current.remove();
       }
 
-      // Initialize map
       const map = window.L.map(mapContainerRef.current, {
         center: [mapCenter.lat, mapCenter.lng],
         zoom: 13,
@@ -183,23 +184,19 @@ export default function ExploreView({
 
       leafletMapRef.current = map;
 
-      // Add a clean tile layer (CartoDB Positron style coordinates map)
       window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         maxZoom: 19
       }).addTo(map);
 
-      // Add custom zoom control at bottom right
       window.L.control.zoom({
         position: 'bottomright'
       }).addTo(map);
 
-      // Draw custom pins for monuments
       updateMapMarkers(map);
     }
   }, [activePlaces]);
 
   const updateMapMarkers = (map) => {
-    // Clear old markers
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
 
@@ -208,7 +205,6 @@ export default function ExploreView({
     activePlaces.forEach(place => {
       const theme = getCategoryTheme(place.category);
       
-      // Custom HTML Marker matching Terracotta / Saffron teardrops
       const customIcon = window.L.divIcon({
         className: 'custom-div-icon',
         html: `
@@ -266,7 +262,7 @@ export default function ExploreView({
               className="bg-transparent border-none outline-none w-full text-sm font-sans text-on-surface placeholder:text-outline-variant"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="p-0.5 hover:bg-surface-container rounded-full">
+              <button onClick={() => setSearchQuery('')} className="p-0.5 hover:bg-surface-container rounded-full" title="Clear search">
                 <span className="material-symbols-outlined text-xs">close</span>
               </button>
             )}
@@ -297,7 +293,9 @@ export default function ExploreView({
         <div className="flex-grow overflow-y-auto hide-scroll p-4 space-y-3 bg-surface-container-lowest">
           {activePlaces.length > 0 ? (
             activePlaces.map((place) => {
-              const theme = getCategoryTheme(place.category);
+              const isSaved = savedMonuments.some(s => s.id === place.id);
+              const isInPlan = dayPlan.some(p => p.id === place.id);
+
               return (
                 <div 
                   key={place.id}
@@ -321,15 +319,45 @@ export default function ExploreView({
                   {/* Core Meta Details */}
                   <div className="flex-grow flex flex-col justify-between">
                     <div>
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-outline">
-                          {place.category}
-                        </span>
-                        <span className="text-outline-variant text-[10px]">•</span>
-                        <span className="text-[10px] text-on-surface-variant font-medium">
-                          {formatDistance(place)}
-                        </span>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-outline">
+                            {place.category}
+                          </span>
+                          <span className="text-outline-variant text-[10px]">•</span>
+                          <span className="text-[10px] text-on-surface-variant font-medium">
+                            {formatDistance(place)}
+                          </span>
+                        </div>
+
+                        {/* Bookmark quick button */}
+                        {onToggleBookmark && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleBookmark(place);
+                              if (onShowToast) {
+                                onShowToast(
+                                  isSaved ? `Removed ${place.title} from Saved` : `Saved ${place.title}`,
+                                  isSaved ? 'bookmark_remove' : 'bookmark_added'
+                                );
+                              }
+                            }}
+                            className={`p-1 rounded-full transition-colors ${
+                              isSaved ? 'text-secondary hover:bg-secondary/10' : 'text-outline hover:text-primary hover:bg-surface-container'
+                            }`}
+                            title={isSaved ? 'Remove bookmark' : 'Bookmark landmark'}
+                          >
+                            <span 
+                              className="material-symbols-outlined text-sm"
+                              style={{ fontVariationSettings: isSaved ? "'FILL' 1" : "'FILL' 0" }}
+                            >
+                              {isSaved ? 'bookmark' : 'bookmark_border'}
+                            </span>
+                          </button>
+                        )}
                       </div>
+
                       <h3 className="font-sans font-bold text-sm text-primary line-clamp-1">{place.title}</h3>
                       <p className="font-sans text-xs text-on-surface-variant mt-0.5 line-clamp-1 italic">{place.subtitle}</p>
                     </div>
@@ -346,10 +374,15 @@ export default function ExploreView({
                           e.stopPropagation();
                           onAddToDayPlan(place);
                         }}
-                        className="text-xs font-bold text-secondary hover:text-secondary-container flex items-center gap-0.5"
+                        className={`text-xs font-bold flex items-center gap-0.5 transition-colors ${
+                          isInPlan ? 'text-green-700' : 'text-secondary hover:text-secondary-container'
+                        }`}
+                        title={isInPlan ? 'Already in Day Plan' : 'Add to Day Plan'}
                       >
-                        <span className="material-symbols-outlined text-sm font-bold">add</span>
-                        <span>Day Plan</span>
+                        <span className="material-symbols-outlined text-sm font-bold">
+                          {isInPlan ? 'check' : 'add'}
+                        </span>
+                        <span>{isInPlan ? 'In Plan' : 'Day Plan'}</span>
                       </button>
                     </div>
                   </div>
@@ -376,18 +409,14 @@ export default function ExploreView({
           {/* Fallback Custom Stylized Vector Canvas/SVG if Leaflet fails to mount offline */}
           <div className="absolute inset-0 bg-surface-container-low flex flex-col justify-center items-center pointer-events-none z-0">
             <div className="w-full h-full max-w-4xl p-6 opacity-30 flex items-center justify-center">
-              {/* Complex SVG layout for heritage coordinates map background */}
               <svg width="100%" height="100%" viewBox="0 0 800 600" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-                {/* Winding roads grid */}
                 <path d="M 0,200 Q 150,180 300,280 T 600,260 T 800,320" stroke="#d9dadb" strokeWidth="20" fill="none" />
                 <path d="M 200,0 Q 250,200 150,400 T 400,600" stroke="#d9dadb" strokeWidth="16" fill="none" />
                 <path d="M 500,0 Q 450,200 650,400 T 500,600" stroke="#d9dadb" strokeWidth="12" fill="none" />
-                {/* Yamuna river line */}
                 <path d="M 600,0 Q 550,150 700,350 T 800,500" stroke="#9caee7" strokeWidth="48" strokeLinecap="round" opacity="0.6" fill="none" />
               </svg>
             </div>
             
-            {/* Interactive hint overlay if leaflet doesn't boot */}
             <div className="absolute bg-white/90 backdrop-blur border border-outline-variant/30 px-5 py-3 rounded-2xl shadow-ambient-card pointer-events-auto text-center space-y-1.5">
               <span className="material-symbols-outlined text-primary text-xl">my_location</span>
               <h4 className="text-xs font-bold text-primary">Sarthi Interactive Map Engine</h4>
@@ -428,6 +457,7 @@ export default function ExploreView({
               }
             }}
             className="p-3 bg-white hover:bg-surface-container rounded-full shadow-ambient-card border border-outline-variant/30 flex items-center justify-center transition-colors transform active:scale-95"
+            title="Zoom In"
           >
             <span className="material-symbols-outlined text-primary">add</span>
           </button>
@@ -439,6 +469,7 @@ export default function ExploreView({
               }
             }}
             className="p-3 bg-white hover:bg-surface-container rounded-full shadow-ambient-card border border-outline-variant/30 flex items-center justify-center transition-colors transform active:scale-95"
+            title="Zoom Out"
           >
             <span className="material-symbols-outlined text-primary">remove</span>
           </button>
@@ -455,6 +486,7 @@ export default function ExploreView({
               <button 
                 onClick={() => setShowDevPanel(false)} 
                 className="p-1 hover:bg-surface-container rounded-full text-outline"
+                title="Close panel"
               >
                 <span className="material-symbols-outlined text-xs">close</span>
               </button>
@@ -490,6 +522,7 @@ export default function ExploreView({
                       key={m.id}
                       onClick={() => {
                         setSimulatedCoords({ lat: m.coords.lat, lng: m.coords.lng });
+                        if (onShowToast) onShowToast(`Warped to ${m.title}`, 'location_on');
                       }}
                       className={`p-2 text-[10px] font-bold border rounded-xl text-left truncate transition-all flex items-center gap-1.5 ${
                         isWarpedHere 
@@ -539,6 +572,7 @@ export default function ExploreView({
                   const lng = parseFloat(customLng);
                   if (!isNaN(lat) && !isNaN(lng)) {
                     setSimulatedCoords({ lat, lng });
+                    if (onShowToast) onShowToast(`Applied custom coords (${lat.toFixed(4)}, ${lng.toFixed(4)})`, 'my_location');
                   }
                 }}
                 className="w-full py-2.5 text-[10px] font-bold bg-primary text-on-primary rounded-xl transition-all hover:bg-primary-container shadow-sm transform active:scale-95"
@@ -554,6 +588,7 @@ export default function ExploreView({
                   setSimulatedCoords(null);
                   setCustomLat('');
                   setCustomLng('');
+                  if (onShowToast) onShowToast('Reset to live GPS', 'restart_alt');
                 }}
                 className="w-full py-2 text-[10px] font-bold border border-outline-variant/50 text-secondary hover:bg-secondary/5 rounded-xl transition-colors"
               >
@@ -596,7 +631,7 @@ export default function ExploreView({
                 onClick={() => {
                   if (onOpenLiveGuide) onOpenLiveGuide(nearbyMonument);
                 }}
-                className="flex-grow bg-secondary hover:bg-secondary-container text-on-secondary text-xs font-bold py-3 px-4 rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5"
+                className="flex-grow bg-secondary hover:bg-secondary-container text-on-secondary text-xs font-bold py-3 px-4 rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5 transform active:scale-95"
               >
                 <span className="material-symbols-outlined text-sm">center_focus_strong</span>
                 <span>Live Guide</span>
@@ -606,7 +641,7 @@ export default function ExploreView({
                 onClick={() => {
                   if (onOpenStory) onOpenStory(nearbyMonument);
                 }}
-                className="bg-surface hover:bg-surface-container border border-outline-variant/60 text-primary text-xs font-semibold py-3 px-3 rounded-xl transition-all flex items-center justify-center gap-1"
+                className="bg-surface hover:bg-surface-container border border-outline-variant/60 text-primary text-xs font-semibold py-3 px-3 rounded-xl transition-all flex items-center justify-center gap-1 transform active:scale-95"
                 title="Read Story"
               >
                 <span className="material-symbols-outlined text-sm">menu_book</span>
@@ -615,7 +650,7 @@ export default function ExploreView({
 
               <button
                 onClick={() => onSelectMonument(nearbyMonument)}
-                className="bg-surface hover:bg-surface-container border border-outline-variant/60 text-primary text-xs font-semibold py-3 px-3 rounded-xl transition-all flex items-center justify-center gap-1"
+                className="bg-surface hover:bg-surface-container border border-outline-variant/60 text-primary text-xs font-semibold py-3 px-3 rounded-xl transition-all flex items-center justify-center gap-1 transform active:scale-95"
                 title="View Details"
               >
                 <span className="material-symbols-outlined text-sm">info</span>
