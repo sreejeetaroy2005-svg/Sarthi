@@ -15,6 +15,8 @@ import ProfileView from './views/ProfileView';
 import Header from './components/Navigation/Header';
 import BottomNav from './components/Navigation/BottomNav';
 import { MONUMENTS, DEFAULT_USER_PROFILE } from './data/monuments';
+import useGeolocation from './hooks/useGeolocation';
+import { getDistanceInMeters } from './utils/distance';
 
 export default function App() {
   // Onboarding / Navigation state
@@ -32,6 +34,27 @@ export default function App() {
   const [userProfile, setUserProfile] = useState(() => {
     const saved = localStorage.getItem('sarthi_user_profile');
     return saved ? JSON.parse(saved) : DEFAULT_USER_PROFILE;
+  });
+
+  const [userLocation, setUserLocation] = useState(() => {
+    const saved = localStorage.getItem('sarthi_user_location');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  // Continuously track user's active geolocation
+  const {
+    location: currentCoords,
+    isSimulated,
+    error: geoError,
+    setSimulatedCoords
+  } = useGeolocation({
+    enabled: step === 'dashboard',
+    initialLocation: userLocation,
+    onPermissionDenied: () => {
+      if (!userLocation || !userLocation.isSandbox) {
+        setStep('location_access');
+      }
+    }
   });
 
   const [dayPlan, setDayPlan] = useState(() => {
@@ -61,6 +84,14 @@ export default function App() {
     localStorage.setItem('sarthi_saved_monuments', JSON.stringify(savedMonuments));
   }, [savedMonuments]);
 
+  useEffect(() => {
+    if (userLocation) {
+      localStorage.setItem('sarthi_user_location', JSON.stringify(userLocation));
+    } else {
+      localStorage.removeItem('sarthi_user_location');
+    }
+  }, [userLocation]);
+
   // Actions Callbacks
   const handleCompleteWelcome = () => {
     setStep('traveler_type');
@@ -72,6 +103,7 @@ export default function App() {
   };
 
   const handleSelectLocation = (location) => {
+    setUserLocation(location);
     localStorage.setItem('sarthi_onboarded', 'true');
     setStep('dashboard');
   };
@@ -102,6 +134,8 @@ export default function App() {
     localStorage.removeItem('sarthi_day_plan');
     localStorage.removeItem('sarthi_saved_monuments');
     localStorage.removeItem('sarthi_user_profile');
+    localStorage.removeItem('sarthi_user_location');
+    setUserLocation(null);
     setUserProfile(DEFAULT_USER_PROFILE);
     setDayPlan([MONUMENTS[0], MONUMENTS[3]]);
     setSavedMonuments([MONUMENTS[1], MONUMENTS[2]]);
@@ -167,7 +201,12 @@ export default function App() {
               <ExploreView 
                 onSelectMonument={(m) => setSelectedMonument(m)} 
                 onAddToDayPlan={handleAddToDayPlan}
-                userLocation={null} 
+                onOpenLiveGuide={(m) => setArMonument(m)}
+                onOpenStory={(m) => setStoryMonument(m)}
+                onOpenAudioGuide={(m) => setAudioMonument(m)}
+                userLocation={currentCoords}
+                isSimulated={isSimulated}
+                setSimulatedCoords={setSimulatedCoords}
               />
             )}
             
@@ -207,7 +246,14 @@ export default function App() {
           setSelectedMonument(null);
           setActiveTab(tab);
         }}
-        onOpenAR={() => setArMonument(selectedMonument || MONUMENTS[0])} 
+        onOpenAR={() => {
+          const nearest = currentCoords ? MONUMENTS.reduce((prev, curr) => {
+            const distPrev = getDistanceInMeters(currentCoords.lat, currentCoords.lng, prev.coords.lat, prev.coords.lng);
+            const distCurr = getDistanceInMeters(currentCoords.lat, currentCoords.lng, curr.coords.lat, curr.coords.lng);
+            return distCurr < distPrev ? curr : prev;
+          }) : null;
+          setArMonument(selectedMonument || nearest || MONUMENTS[0]);
+        }} 
       />
 
       {/* Floating Audio Guide Player popup */}

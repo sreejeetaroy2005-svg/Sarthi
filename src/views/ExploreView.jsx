@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MONUMENTS } from '../data/monuments';
+import { getDistanceInMeters } from '../utils/distance';
 
-export default function ExploreView({ onSelectMonument, onAddToDayPlan, userLocation }) {
+export default function ExploreView({ 
+  onSelectMonument, 
+  onAddToDayPlan, 
+  onOpenLiveGuide,
+  onOpenStory,
+  onOpenAudioGuide,
+  userLocation,
+  isSimulated,
+  setSimulatedCoords
+}) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activePlaces, setActivePlaces] = useState(MONUMENTS);
@@ -12,6 +22,109 @@ export default function ExploreView({ onSelectMonument, onAddToDayPlan, userLoca
   const mapContainerRef = useRef(null);
   const leafletMapRef = useRef(null);
   const markersRef = useRef([]);
+  const userMarkerRef = useRef(null);
+
+  // Proximity alerts & Simulation UI state
+  const [showDevPanel, setShowDevPanel] = useState(false);
+  const [customLat, setCustomLat] = useState('');
+  const [customLng, setCustomLng] = useState('');
+  const [nearbyMonument, setNearbyMonument] = useState(null);
+  const [isCardDismissed, setIsCardDismissed] = useState(false);
+  const [nearbyDistance, setNearbyDistance] = useState(0);
+
+  const PROXIMITY_THRESHOLD = 150; // meters
+
+  // Format real-time distances in the sidebar dynamically
+  const formatDistance = (monument) => {
+    if (!userLocation) return monument.distance;
+    const distMeters = getDistanceInMeters(
+      userLocation.lat,
+      userLocation.lng,
+      monument.coords.lat,
+      monument.coords.lng
+    );
+    if (distMeters < 1000) {
+      return `${Math.round(distMeters)} m`;
+    }
+    return `${(distMeters / 1000).toFixed(1)} km`;
+  };
+
+  // Check proximity to all monuments continuously
+  useEffect(() => {
+    if (!userLocation) {
+      setNearbyMonument(null);
+      return;
+    }
+
+    let closestMon = null;
+    let minDistance = Infinity;
+
+    MONUMENTS.forEach(m => {
+      const dist = getDistanceInMeters(
+        userLocation.lat,
+        userLocation.lng,
+        m.coords.lat,
+        m.coords.lng
+      );
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestMon = m;
+      }
+    });
+
+    if (closestMon && minDistance <= PROXIMITY_THRESHOLD) {
+      if (!nearbyMonument || nearbyMonument.id !== closestMon.id) {
+        setNearbyMonument(closestMon);
+        setIsCardDismissed(false);
+      }
+      setNearbyDistance(Math.round(minDistance));
+    } else {
+      setNearbyMonument(null);
+    }
+  }, [userLocation, nearbyMonument]);
+
+  // Center on user position when warped (simulated)
+  useEffect(() => {
+    if (userLocation && leafletMapRef.current && isSimulated) {
+      leafletMapRef.current.setView([userLocation.lat, userLocation.lng], 14);
+    }
+  }, [userLocation, isSimulated]);
+
+  // Handle first auto-center on load
+  const hasAutoCentered = useRef(false);
+  useEffect(() => {
+    if (userLocation && leafletMapRef.current && !hasAutoCentered.current) {
+      leafletMapRef.current.setView([userLocation.lat, userLocation.lng], 14);
+      hasAutoCentered.current = true;
+    }
+  }, [userLocation]);
+
+  // Update user pulsing marker on Leaflet map dynamically
+  useEffect(() => {
+    if (!leafletMapRef.current || !window.L) return;
+
+    if (userMarkerRef.current) {
+      userMarkerRef.current.remove();
+      userMarkerRef.current = null;
+    }
+
+    if (userLocation) {
+      const userIcon = window.L.divIcon({
+        className: 'user-location-marker',
+        html: `
+          <div class="relative flex items-center justify-center">
+            <span class="absolute inline-flex h-8 w-8 rounded-full bg-blue-500 opacity-30 animate-ping"></span>
+            <span class="relative inline-flex rounded-full h-4 w-4 bg-blue-600 border-2 border-white shadow-md"></span>
+          </div>
+        `,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+
+      userMarkerRef.current = window.L.marker([userLocation.lat, userLocation.lng], { icon: userIcon })
+        .addTo(leafletMapRef.current);
+    }
+  }, [userLocation]);
 
   // Category listing
   const categories = ['All', 'Heritage', 'Spiritual', 'Culture', 'Food'];
@@ -123,7 +236,8 @@ export default function ExploreView({ onSelectMonument, onAddToDayPlan, userLoca
 
   const handleRecenter = () => {
     if (leafletMapRef.current) {
-      leafletMapRef.current.setView([mapCenter.lat, mapCenter.lng], 13);
+      const center = userLocation || mapCenter;
+      leafletMapRef.current.setView([center.lat, center.lng], 14);
     }
   };
 
@@ -213,7 +327,7 @@ export default function ExploreView({ onSelectMonument, onAddToDayPlan, userLoca
                         </span>
                         <span className="text-outline-variant text-[10px]">•</span>
                         <span className="text-[10px] text-on-surface-variant font-medium">
-                          {place.distance}
+                          {formatDistance(place)}
                         </span>
                       </div>
                       <h3 className="font-sans font-bold text-sm text-primary line-clamp-1">{place.title}</h3>
@@ -286,6 +400,19 @@ export default function ExploreView({ onSelectMonument, onAddToDayPlan, userLoca
 
         {/* Map Control Actions overlay */}
         <div className="absolute top-4 right-4 z-30 flex flex-col gap-2">
+          {/* Dev Simulation Toggle button */}
+          <button 
+            onClick={() => setShowDevPanel(!showDevPanel)}
+            className={`p-3 rounded-full shadow-ambient-card border flex items-center justify-center transition-colors transform active:scale-95 ${
+              isSimulated 
+                ? 'bg-amber-100 border-amber-300 hover:bg-amber-200 text-amber-800' 
+                : 'bg-white border-outline-variant/30 hover:bg-surface-container text-primary'
+            }`}
+            title="GPS Simulation Controls"
+          >
+            <span className="material-symbols-outlined">{isSimulated ? 'construction' : 'bug_report'}</span>
+          </button>
+
           <button 
             onClick={handleRecenter}
             className="p-3 bg-white hover:bg-surface-container rounded-full shadow-ambient-card border border-outline-variant/30 flex items-center justify-center transition-colors transform active:scale-95"
@@ -316,6 +443,187 @@ export default function ExploreView({ onSelectMonument, onAddToDayPlan, userLoca
             <span className="material-symbols-outlined text-primary">remove</span>
           </button>
         </div>
+
+        {/* GPS Simulation Panel Overlay */}
+        {showDevPanel && (
+          <div className="absolute top-20 right-4 z-30 bg-white/95 backdrop-blur-md border border-outline-variant/30 rounded-3xl shadow-ambient-elevated p-5 w-[320px] space-y-4 font-sans animate-fade-in">
+            <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2.5">
+              <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+                <span className="material-symbols-outlined text-base">construction</span>
+                <span>GPS Simulation Panel</span>
+              </div>
+              <button 
+                onClick={() => setShowDevPanel(false)} 
+                className="p-1 hover:bg-surface-container rounded-full text-outline"
+              >
+                <span className="material-symbols-outlined text-xs">close</span>
+              </button>
+            </div>
+            
+            {/* Status indicators */}
+            <div className="grid grid-cols-2 gap-2 text-xs bg-surface-container-low p-3 rounded-xl border border-outline-variant/20">
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-outline font-bold uppercase tracking-wider block">Status</span>
+                <p className={`font-semibold ${isSimulated ? 'text-amber-600' : 'text-green-600'}`}>
+                  {isSimulated ? '🔴 Simulated' : '🟢 Live GPS'}
+                </p>
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-outline font-bold uppercase tracking-wider block">Coordinates</span>
+                <p className="font-semibold text-on-surface truncate" title={`${userLocation?.lat?.toFixed(5) || 0}, ${userLocation?.lng?.toFixed(5) || 0}`}>
+                  {userLocation ? `${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}` : 'No GPS Signal'}
+                </p>
+              </div>
+            </div>
+
+            {/* Quick warp monuments */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-outline uppercase tracking-wider block">Warp to Monument</label>
+              <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto pr-1 hide-scroll">
+                {MONUMENTS.map((m) => {
+                  const isWarpedHere = userLocation && 
+                    Math.abs(userLocation.lat - m.coords.lat) < 0.0001 &&
+                    Math.abs(userLocation.lng - m.coords.lng) < 0.0001;
+
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setSimulatedCoords({ lat: m.coords.lat, lng: m.coords.lng });
+                      }}
+                      className={`p-2 text-[10px] font-bold border rounded-xl text-left truncate transition-all flex items-center gap-1.5 ${
+                        isWarpedHere 
+                          ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-sm'
+                          : 'bg-white hover:bg-surface-container border-outline-variant/35 text-primary'
+                      }`}
+                      title={`Warp to ${m.title}`}
+                    >
+                      <span>📍</span>
+                      <span className="truncate">{m.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Manual coordinates inputs */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-outline uppercase tracking-wider block">Manual Override</label>
+              <div className="flex gap-2">
+                <div className="w-1/2 space-y-1">
+                  <span className="text-[9px] text-outline font-medium">Latitude</span>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    placeholder="e.g. 28.5933"
+                    value={customLat}
+                    onChange={(e) => setCustomLat(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-surface border border-outline-variant/40 rounded-xl outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                  />
+                </div>
+                <div className="w-1/2 space-y-1">
+                  <span className="text-[9px] text-outline font-medium">Longitude</span>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    placeholder="e.g. 77.2507"
+                    value={customLng}
+                    onChange={(e) => setCustomLng(e.target.value)}
+                    className="w-full p-2.5 text-xs bg-surface border border-outline-variant/40 rounded-xl outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  const lat = parseFloat(customLat);
+                  const lng = parseFloat(customLng);
+                  if (!isNaN(lat) && !isNaN(lng)) {
+                    setSimulatedCoords({ lat, lng });
+                  }
+                }}
+                className="w-full py-2.5 text-[10px] font-bold bg-primary text-on-primary rounded-xl transition-all hover:bg-primary-container shadow-sm transform active:scale-95"
+              >
+                Apply Custom Coordinates
+              </button>
+            </div>
+
+            {/* Reset controls */}
+            {isSimulated && (
+              <button
+                onClick={() => {
+                  setSimulatedCoords(null);
+                  setCustomLat('');
+                  setCustomLng('');
+                }}
+                className="w-full py-2 text-[10px] font-bold border border-outline-variant/50 text-secondary hover:bg-secondary/5 rounded-xl transition-colors"
+              >
+                Reset to Live GPS / Clear Override
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Proximity Warning Slide-up Card */}
+        {nearbyMonument && !isCardDismissed && (
+          <div className="absolute bottom-20 md:bottom-6 left-4 right-4 md:left-6 md:right-auto md:w-[380px] z-40 bg-white/95 backdrop-blur-md border border-outline-variant/30 rounded-3xl shadow-ambient-elevated p-5 flex flex-col gap-4 font-sans animate-slide-up">
+            <div className="flex justify-between items-start">
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-secondary animate-ping shrink-0"></span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-secondary">
+                    You're Nearby ({nearbyDistance}m away)
+                  </span>
+                </div>
+                <h3 className="font-display text-xl font-bold text-primary leading-tight">
+                  {nearbyMonument.title}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setIsCardDismissed(true)} 
+                className="p-1 hover:bg-surface-container rounded-full transition-colors text-outline"
+                title="Dismiss"
+              >
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            </div>
+
+            <p className="text-xs text-on-surface-variant leading-relaxed font-normal">
+              {nearbyMonument.overview ? nearbyMonument.overview.split('.')[0] + '.' : 'Discover the secrets of this historical marvel.'}
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (onOpenLiveGuide) onOpenLiveGuide(nearbyMonument);
+                }}
+                className="flex-grow bg-secondary hover:bg-secondary-container text-on-secondary text-xs font-bold py-3 px-4 rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-sm">center_focus_strong</span>
+                <span>Live Guide</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (onOpenStory) onOpenStory(nearbyMonument);
+                }}
+                className="bg-surface hover:bg-surface-container border border-outline-variant/60 text-primary text-xs font-semibold py-3 px-3 rounded-xl transition-all flex items-center justify-center gap-1"
+                title="Read Story"
+              >
+                <span className="material-symbols-outlined text-sm">menu_book</span>
+                <span>Story</span>
+              </button>
+
+              <button
+                onClick={() => onSelectMonument(nearbyMonument)}
+                className="bg-surface hover:bg-surface-container border border-outline-variant/60 text-primary text-xs font-semibold py-3 px-3 rounded-xl transition-all flex items-center justify-center gap-1"
+                title="View Details"
+              >
+                <span className="material-symbols-outlined text-sm">info</span>
+                <span>Details</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
