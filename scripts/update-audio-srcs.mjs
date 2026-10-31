@@ -19,8 +19,13 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const MONUMENTS_FILE = path.join(PROJECT_ROOT, 'src/data/monuments.js');
-const AUDIO_BASE = path.join(PROJECT_ROOT, 'public/audio');
+const MONUMENTS_FILE = fs.existsSync(path.join(PROJECT_ROOT, 'frontend/src/data/monuments.js'))
+  ? path.join(PROJECT_ROOT, 'frontend/src/data/monuments.js')
+  : path.join(PROJECT_ROOT, 'src/data/monuments.js');
+
+const AUDIO_BASE = fs.existsSync(path.join(PROJECT_ROOT, 'frontend/public/audio'))
+  ? path.join(PROJECT_ROOT, 'frontend/public/audio')
+  : path.join(PROJECT_ROOT, 'public/audio');
 
 console.log('\n🔧  Sarthi — Patching audioSrc fields in monuments.js\n');
 
@@ -39,12 +44,13 @@ const monumentDirs = fs.readdirSync(AUDIO_BASE, { withFileTypes: true })
 
 for (const monumentId of monumentDirs) {
   const monumentAudioDir = path.join(AUDIO_BASE, monumentId);
-  const mp3Files = fs.readdirSync(monumentAudioDir)
-    .filter(f => f.endsWith('.mp3'));
+  const audioFiles = fs.readdirSync(monumentAudioDir)
+    .filter(f => f.endsWith('.mp3') || f.endsWith('.wav'));
 
-  for (const mp3File of mp3Files) {
-    const chapterId = path.basename(mp3File, '.mp3');
-    const publicPath = `/audio/${monumentId}/${chapterId}.mp3`;
+  for (const audioFile of audioFiles) {
+    const ext = path.extname(audioFile);
+    const chapterId = path.basename(audioFile, ext);
+    const publicPath = `/audio/${monumentId}/${chapterId}${ext}`;
 
     // Replace: audioSrc: "" for this chapter only (scoped by chapter id context)
     // We look for id: "chapterId" then the next audioSrc: "" within ~5 lines

@@ -3,29 +3,21 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "node -e \"import('child_process').then(cp => { cp.spawn('npm', ['run', 'dev', '--prefix', 'backend'], { stdio: 'inherit', shell: true }); cp.spawn('npm', ['run', 'dev', '--prefix', 'frontend'], { stdio: 'inherit', shell: true }); })\"",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "frontend": "npm run dev --prefix frontend",
+    "backend": "npm run dev --prefix backend",
+    "build": "npm run build --prefix frontend",
+    "preview": "npm run preview --prefix frontend",
+    "start": "npm start --prefix backend",
+    "install:all": "npm install --prefix frontend && npm install --prefix backend",
     "generate-audio": "node scripts/generate-audio.mjs",
     "update-audio-srcs": "node scripts/update-audio-srcs.mjs"
-  },
-  "dependencies": {
-    "leaflet": "^1.9.4",
-    "lucide-react": "^0.344.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-leaflet": "^4.2.1"
-  },
-  "devDependencies": {
-    "@types/leaflet": "^1.9.8",
-    "@types/react": "^18.2.66",
-    "@types/react-dom": "^18.2.22",
-    "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.19",
-    "dotenv": "^17.4.2",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.1",
-    "vite": "^5.2.0"
   }
 }
