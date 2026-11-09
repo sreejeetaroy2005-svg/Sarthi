@@ -10,6 +10,7 @@
  * localStorage and recalculated after the traveler reorders or moves a stop.
  */
 import { getDistanceInMeters } from '../utils/distance';
+import { formatDate, formatNumber, getUILanguage } from '../i18n';
 
 export const PACE_LIMITS = Object.freeze({
   relaxed: 2,
@@ -106,7 +107,7 @@ export function weekdayFor(isoDate) {
 
 export function formatDateLabel(isoDate) {
   const date = parseISODate(isoDate);
-  return date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  return formatDate(date, getUILanguage(), { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 export function parseClock(value) {
@@ -122,14 +123,15 @@ export function formatClock(totalMinutes) {
   const minutesInDay = ((Math.round(totalMinutes) % 1440) + 1440) % 1440;
   const h24 = Math.floor(minutesInDay / 60);
   const minutes = minutesInDay % 60;
-  const suffix = h24 >= 12 ? 'PM' : 'AM';
   const hour = h24 % 12 === 0 ? 12 : h24 % 12;
-  return `${hour}:${pad2(minutes)} ${suffix}`;
+  const locale = ({ en: 'en-IN', hi: 'hi-IN', ta: 'ta-IN', bn: 'bn-IN' })[getUILanguage()] || 'en-IN';
+  return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(new Date(2000, 0, 1, hour === 12 && h24 < 12 ? 0 : hour + (h24 >= 12 && hour < 12 ? 12 : 0), minutes));
 }
 
 export function formatDuration(totalMinutes) {
   const minutes = Math.max(0, Math.round(totalMinutes));
-  if (minutes < 60) return `${minutes} min`;
+  const localized = formatNumber(minutes, getUILanguage());
+  if (minutes < 60) return `${localized} min`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return `${hours} hr${hours > 1 ? 's' : ''}${rest ? ` ${rest} min` : ''}`;

@@ -49,15 +49,29 @@ export function getSupportedLanguages() {
 // 429 backoff is pending.
 let tail = Promise.resolve();
 let queueLength = 0;
+const activeAbortControllers = new Set();
+
+// Ending a trip aborts active Gnani fetches and makes queued work no-op.
+let queueGeneration = 0;
+export function cancelGnaniRequests() {
+  queueGeneration += 1;
+  activeAbortControllers.forEach((controller) => controller.abort());
+  activeAbortControllers.clear();
+  inFlight.clear();
+}
 
 function enqueue(label, task) {
   queueLength += 1;
   console.log(`[Gnani] queue length: ${queueLength}`);
+  const generation = queueGeneration;
 
   const run = () => {
     queueLength -= 1;
     console.log(`[Gnani] start ${label} (queue length: ${queueLength})`);
-    return task();
+    if (generation !== queueGeneration) return Promise.reject(abortError());
+    const controller = new AbortController();
+    activeAbortControllers.add(controller);
+    return Promise.resolve(task(controller.signal)).finally(() => activeAbortControllers.delete(controller));
   };
 
   const result = tail.then(run, run);
@@ -77,6 +91,18 @@ function abortError() {
 
 function throwIfAborted(signal) {
   if (signal?.aborted) throw abortError();
+}
+
+function combineSignals(first, second) {
+  if (!first) return second;
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (first.aborted || second.aborted) controller.abort();
+  else {
+    first.addEventListener('abort', abort, { once: true });
+    second.addEventListener('abort', abort, { once: true });
+  }
+  return controller.signal;
 }
 
 function sleep(ms, signal) {
@@ -311,19 +337,20 @@ export function synthesize(text, langCode = 'en', options = {}) {
   }
 
   // 3. Queue it — only one Gnani request may be active at a time.
-  const promise = enqueue('tts', async () => {
-    throwIfAborted(signal);
+  const promise = enqueue('tts', async (queueSignal) => {
+    const requestSignal = combineSignals(signal, queueSignal);
+    throwIfAborted(requestSignal);
 
     // Persistent cache: survives reloads, so credits are never re-spent.
     const stored = await idbGetBlob(key);
     if (stored) {
-      throwIfAborted(signal);
+      throwIfAborted(requestSignal);
       const url = URL.createObjectURL(stored);
       cacheSet(key, url);
       return url;
     }
 
-    throwIfAborted(signal);
+    throwIfAborted(requestSignal);
 
     const config = LANG_CONFIG[langCode] || LANG_CONFIG.en;
 
@@ -349,7 +376,7 @@ export function synthesize(text, langCode = 'en', options = {}) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       },
-      signal,
+      requestSignal,
       'TTS'
     );
 
@@ -402,8 +429,9 @@ export async function transcribe(wavBlob, options = {}) {
     return pending;
   }
 
-  const promise = enqueue('stt', async () => {
-    throwIfAborted(signal);
+  const promise = enqueue('stt', async (queueSignal) => {
+    const requestSignal = combineSignals(signal, queueSignal);
+    throwIfAborted(requestSignal);
 
     const formData = new FormData();
     formData.append('audio_file', wavBlob, 'recording.wav');
@@ -413,7 +441,7 @@ export async function transcribe(wavBlob, options = {}) {
     const res = await requestWithRetry(
       `${API_BASE}/gnani/stt`,
       { method: 'POST', body: formData },
-      signal,
+      requestSignal,
       'STT'
     );
 

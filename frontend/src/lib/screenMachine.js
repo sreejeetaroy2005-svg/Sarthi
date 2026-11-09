@@ -1,0 +1,36 @@
+export const SCREEN_TRANSITIONS = Object.freeze({
+  language: ['destination', 'home'],
+  destination: ['days', 'language', 'home'],
+  days: ['mode', 'destination', 'home'],
+  mode: ['group', 'days', 'home'],
+  group: ['places', 'mode', 'home'],
+  places: ['itinerary', 'group', 'home'],
+  itinerary: ['overview', 'places', 'my_trip', 'home', 'place_detail'],
+  overview: ['passes', 'itinerary', 'my_trip', 'home', 'place_detail'],
+  passes: ['getting_there', 'overview', 'home'],
+  resume: ['passes', 'destination', 'home'],
+  location: ['home', 'passes'],
+  home: ['destination', 'language', 'my_trip', 'profile', 'past_trips', 'place_detail', 'audio_guide', 'live_guide', 'landmark_story', 'route_plan', 'getting_there', 'arrival_briefing', 'guided_walk', 'what_next', 'quick-profile'],
+  my_trip: ['home', 'profile', 'past_trips', 'itinerary', 'overview', 'destination', 'getting_there', 'what_next', 'place_detail', 'audio_guide', 'live_guide', 'landmark_story', 'route_plan'],
+  profile: ['home', 'my_trip', 'destination', 'language'],
+  past_trips: ['home', 'my_trip'],
+  day_plan: ['home', 'my_trip', 'itinerary', 'place_detail', 'route_plan', 'destination'],
+  place_detail: ['home', 'my_trip', 'day_plan', 'audio_guide', 'live_guide', 'landmark_story', 'route_plan', 'itinerary'],
+  audio_guide: ['home', 'my_trip', 'place_detail', 'live_guide', 'landmark_story', 'trip_story'],
+  live_guide: ['home', 'my_trip', 'place_detail', 'audio_guide', 'guided_walk', 'getting_there'],
+  landmark_story: ['home', 'my_trip', 'place_detail', 'audio_guide'],
+  route_plan: ['home', 'my_trip', 'day_plan', 'place_detail'],
+  getting_there: ['arrival_briefing', 'travel_access', 'home'],
+  arrival_briefing: ['getting_there', 'photo_checkin', 'travel_access', 'home'],
+  photo_checkin: ['arrival_briefing', 'guided_walk', 'what_next', 'trip_summary', 'travel_access', 'home'],
+  guided_walk: ['guided_walk', 'what_next', 'trip_summary', 'live_guide', 'home'],
+  what_next: ['getting_there', 'confirm_end_trip', 'trip_summary', 'home'],
+  confirm_end_trip: ['what_next', 'trip_summary'],
+  trip_summary: ['trip_story', 'home', 'what_next'],
+  trip_story: ['trip_summary', 'home'],
+  travel_access: ['getting_there', 'arrival_briefing', 'photo_checkin', 'guided_walk', 'home'],
+});
+
+export function canTransition(from, to) {
+  return Boolean(SCREEN_TRANSITIONS[from]?.includes(to));
+}

@@ -1,5 +1,6 @@
 import React from 'react';
 import WizardProgress from './WizardProgress';
+import { useT } from '../../i18n';
 
 /**
  * Shared frame for the planning wizard screens: back button and progress
@@ -16,6 +17,7 @@ export default function StepShell({
   footer,
   wide = false,
 }) {
+  const t = useT();
   return (
     <div className="min-h-screen bg-background flex flex-col p-6 relative overflow-hidden">
       <div className="absolute top-[-20%] right-[-20%] w-[80%] h-[50%] rounded-full bg-secondary/5 blur-[120px] pointer-events-none"></div>
@@ -26,7 +28,7 @@ export default function StepShell({
           <button
             onClick={onBack}
             className="p-2 rounded-full hover:bg-surface-container-low transition-colors"
-            title="Back"
+            title={t('common.back')}
           >
             <span className="material-symbols-outlined text-on-surface">arrow_back</span>
           </button>
@@ -34,7 +36,7 @@ export default function StepShell({
           <div className="w-10"></div>
         )}
         <span className="text-xs font-semibold text-outline tracking-widest">
-          {eyebrow || `STEP ${step} OF ${total}`}
+          {eyebrow || t('wizard.step', { step, total })}
         </span>
         <div className="w-10"></div>
       </div>

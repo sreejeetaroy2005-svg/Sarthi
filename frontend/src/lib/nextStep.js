@@ -1,11 +1,18 @@
 import { getDistanceInMeters } from '../utils/distance';
+import { formatTime as formatLocalizedTime, getUILanguage } from '../i18n';
 
 const SPEED_KMH = Object.freeze({ walk: 4.5, auto: 16, cab: 20 });
 const MEAL_WINDOWS = Object.freeze([
-  { id: 'breakfast', label: 'Breakfast', from: 8 * 60, to: 10 * 60 },
-  { id: 'lunch', label: 'Lunch', from: 12 * 60, to: 14 * 60 },
-  { id: 'dinner', label: 'Dinner', from: 19 * 60, to: 21 * 60 },
+  { id: 'breakfast', from: 8 * 60, to: 10 * 60 },
+  { id: 'lunch', from: 12 * 60, to: 14 * 60 },
+  { id: 'dinner', from: 19 * 60, to: 21 * 60 },
 ]);
+const MEAL_LABELS = Object.freeze({
+  en: { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' },
+  hi: { breakfast: 'नाश्ता', lunch: 'दोपहर का भोजन', dinner: 'रात का खाना' },
+  ta: { breakfast: 'காலை உணவு', lunch: 'மதிய உணவு', dinner: 'இரவு உணவு' },
+  bn: { breakfast: 'সকালের খাবার', lunch: 'দুপুরের খাবার', dinner: 'রাতের খাবার' },
+});
 
 const pad = (number) => String(number).padStart(2, '0');
 
@@ -26,7 +33,7 @@ export function minutesOfDay(value) {
 export function formatTime(value) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return 'Time unavailable';
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return formatLocalizedTime(date, getUILanguage());
 }
 
 function parseHours(place) {
@@ -179,6 +186,7 @@ export function calculateNextStep({
   const firstFeasible = orderedRemaining.find((item) => item.feasible);
   const nextStop = firstFeasible || orderedRemaining[0] || null;
   const mealWindow = getMealWindow(currentTime);
+  if (mealWindow) mealWindow.label = MEAL_LABELS[getUILanguage()]?.[mealWindow.id] || MEAL_LABELS.en[mealWindow.id];
   const seniors = Boolean(groupNeeds.seniors || groupNeeds.tripType === 'senior');
   const kids = Boolean(groupNeeds.kids || groupNeeds.counts?.children > 0);
   const fatigueThreshold = seniors ? 35 : kids ? 45 : 75;

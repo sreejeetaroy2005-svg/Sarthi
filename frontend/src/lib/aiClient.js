@@ -65,7 +65,7 @@ function readAsBase64(file) {
   });
 }
 
-export async function identifyPlaceFromPhoto(file, candidatePlaceIds, { signal } = {}) {
+export async function identifyPlaceFromPhoto(file, candidatePlaceIds, language = 'en', { signal } = {}) {
   if (!(file instanceof Blob) || !file.size || file.size > MAX_PHOTO_BYTES) {
     throw new Error('Choose a photo smaller than 6 MB.');
   }
@@ -77,6 +77,7 @@ export async function identifyPlaceFromPhoto(file, candidatePlaceIds, { signal }
     imageBase64: await readAsBase64(file),
     mimeType,
     candidatePlaceIds,
+    language,
   }, { signal });
   validateVisionResult(result);
   return result;

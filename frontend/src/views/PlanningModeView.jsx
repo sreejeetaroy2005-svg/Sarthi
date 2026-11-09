@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import StepShell from '../components/PlanWizard/StepShell';
+import { useT } from '../i18n';
 
 const MODES = [
   {
@@ -7,25 +8,26 @@ const MODES = [
     label: 'Plan it for me',
     icon: 'auto_awesome',
     desc: 'We pick the places that match your group, pace and interests, then build the schedule.',
-    bullets: ['Pre-selected places', 'Balanced days', 'Editable afterwards'],
+    bulletKeys: ['mode.bullet.autoSelected', 'mode.bullet.balanced', 'mode.bullet.editable'],
   },
   {
     id: 'manual',
     label: "I'll choose myself",
     icon: 'checklist',
     desc: 'Browse every place and select exactly what you want to see.',
-    bullets: ['Nothing pre-selected', 'Full control', 'Same smart scheduling'],
+    bulletKeys: ['mode.bullet.empty', 'mode.bullet.control', 'mode.bullet.schedule'],
   },
 ];
 
 export default function PlanningModeView({ mode, onContinue, onBack }) {
   const [selected, setSelected] = useState(mode || null);
+  const t = useT();
 
   return (
     <StepShell
       step={4}
-      title="How should we plan it?"
-      subtitle="You can still edit every stop after the plan is built."
+      title={t('mode.heading')}
+      subtitle={t('mode.help')}
       onBack={onBack}
       footer={
         <button
@@ -33,7 +35,7 @@ export default function PlanningModeView({ mode, onContinue, onBack }) {
           disabled={!selected}
           className="w-full bg-primary hover:bg-primary-container text-on-primary font-sans font-semibold py-4 px-6 rounded-2xl shadow-md transform active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40"
         >
-          <span>Continue</span>
+          <span>{t('common.continue')}</span>
           <span className="material-symbols-outlined">arrow_forward</span>
         </button>
       }
@@ -61,16 +63,16 @@ export default function PlanningModeView({ mode, onContinue, onBack }) {
                 </div>
                 <div className="flex-grow">
                   <h3 className={`font-sans font-bold text-sm ${isSelected ? 'text-primary' : 'text-on-surface'}`}>
-                    {option.label}
+                    {t(option.id === 'auto' ? 'mode.auto' : 'mode.manual')}
                   </h3>
-                  <p className="font-sans text-xs text-on-surface-variant mt-1 leading-relaxed">{option.desc}</p>
+                  <p className="font-sans text-xs text-on-surface-variant mt-1 leading-relaxed">{t(option.id === 'auto' ? 'mode.autoHelp' : 'mode.manualHelp')}</p>
                   <div className="flex flex-wrap gap-1.5 mt-3">
-                    {option.bullets.map((bullet) => (
+                    {option.bulletKeys.map((key) => (
                       <span
-                        key={bullet}
+                        key={key}
                         className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant"
                       >
-                        {bullet}
+                        {t(key)}
                       </span>
                     ))}
                   </div>

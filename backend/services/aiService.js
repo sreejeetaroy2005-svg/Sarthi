@@ -1,4 +1,5 @@
 import { MONUMENTS } from '../../frontend/src/data/monuments.js';
+import { localizePlace } from '../../frontend/src/data/translations/placeContent.js';
 import { config } from '../config.js';
 import {
   askSchema, planSchema, storySchema, validateAsk, validatePlan, validateStory, validateVision, visionSchema,
@@ -25,7 +26,8 @@ function getLandmarks(place) {
   return [...new Set([place.title, ...names])];
 }
 
-function getPlaceFacts(place) {
+function getPlaceFacts(place, language = 'en') {
+  place = localizePlace(place, language);
   const story = place.storyContent || {};
   const facts = [];
   const add = (label, value) => {
@@ -84,20 +86,27 @@ async function generateJson({ system, parts, schema }) {
   }
 }
 
-function visionFallback() {
+function visionFallback(language = 'en') {
+  const reasons = {
+    en: 'I could not confirm the place from this photo. Try another angle or choose “I’m here” to check in manually.',
+    hi: 'इस तस्वीर से जगह की पुष्टि नहीं हो सकी। दूसरा कोण आज़माएँ या हाथ से चेक-इन करने के लिए “मैं यहाँ हूँ” चुनें।',
+    ta: 'இந்தப் புகைப்படத்தில் இடத்தை உறுதிப்படுத்த முடியவில்லை. வேறு கோணத்தில் முயற்சிக்கவும் அல்லது கைமுறையாகப் பதிவு செய்ய “நான் இங்கே இருக்கிறேன்” என்பதைத் தேர்ந்தெடுக்கவும்.',
+    bn: 'এই ছবি থেকে জায়গাটি নিশ্চিত করা যায়নি। অন্য কোণ থেকে চেষ্টা করুন অথবা হাতে চেক-ইন করতে “আমি এখানে” বেছে নিন।',
+  };
   return {
     match: false,
     placeId: null,
     placeName: '',
     landmark: '',
     confidence: 0,
-    reason: 'I could not confirm the place from this photo. Try another angle or choose “I’m here” to check in manually.',
+    reason: reasons[language] || reasons.en,
     fallback: true,
     source: 'fallback',
   };
 }
 
 export async function identifyPlace(input = {}) {
+  const language = safeLanguage(input.language).split('-')[0];
   const mimeType = text(input.mimeType, 40).toLowerCase();
   const imageBase64 = typeof input.imageBase64 === 'string'
     ? input.imageBase64.replace(/^data:image\/(?:jpeg|png|webp);base64,/i, '').replace(/\s/g, '')
@@ -135,7 +144,7 @@ export async function identifyPlace(input = {}) {
   try {
     const result = await generateJson({
       schema,
-      system: 'Identify only a place and landmark visible in the supplied image, choosing from the supplied candidates and their authored landmark names. Do not infer a match from the prompt alone. If uncertain, return match=false, null placeId, empty placeName and landmark, confidence 0. Keep reason to one short statement about visible evidence. Return JSON only.',
+      system: `Identify only a place and landmark visible in the supplied image, choosing from the supplied candidates and their authored landmark names. Do not infer a match from the prompt alone. If uncertain, return match=false, null placeId, empty placeName and landmark, confidence 0. Keep reason to one short statement about visible evidence, written in the user's selected language (${language}). Keep placeName and landmark exactly as candidate values. Return JSON only.`,
       parts: [
         { text: `Candidates (server-authored): ${JSON.stringify(candidates)}` },
         { inlineData: { mimeType, data: imageBase64 } },
@@ -145,7 +154,7 @@ export async function identifyPlace(input = {}) {
     return { ...result, fallback: false, source: 'gemini' };
   } catch (error) {
     console.warn('[AI] vision fallback:', error.message);
-    return visionFallback();
+    return visionFallback(language);
   }
 }
 
@@ -220,7 +229,7 @@ export async function replanTrip(input = {}) {
   }
 }
 
-function fallbackAnswer(question, place, facts) {
+function fallbackAnswer(question, place, facts, language = 'en') {
   const tokens = text(question, 500).toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || [];
   const stop = new Set(['the', 'and', 'for', 'from', 'with', 'what', 'when', 'where', 'does', 'this', 'that', 'about', 'tell', 'please', 'have', 'how', 'why', 'who', 'built', 'was', 'were', 'is', 'are', 'its', 'tell', 'give', 'show', 'explain']);
   const query = [...new Set(tokens.filter((token) => !stop.has(token)))];
@@ -234,8 +243,15 @@ function fallbackAnswer(question, place, facts) {
   if (best && score >= 1) {
     return { answer: best.text.slice(0, 700), grounded: true, sourceLabels: [best.label], fallback: true, source: 'fallback' };
   }
+  const localized = localizePlace(place, language);
+  const noAnswer = {
+    en: `I don't have a reliable answer to that from Sarthi's notes about ${place.title}. Try asking about its history, architecture, visitor guidelines, or opening hours.`,
+    hi: `सारथी के ${localized.localizedName || place.title} से जुड़े नोट्स में इसका भरोसेमंद जवाब नहीं है। इतिहास, वास्तुकला, आगंतुक निर्देश या खुलने के समय के बारे में पूछें।`,
+    ta: `சாரதியின் ${localized.localizedName || place.title} குறிப்புகளில் இதற்கான நம்பகமான பதில் இல்லை. வரலாறு, கட்டிடக்கலை, வருகையாளர் வழிகாட்டல் அல்லது திறக்கும் நேரம் பற்றிக் கேளுங்கள்.`,
+    bn: `সারথির ${localized.localizedName || place.title} সংক্রান্ত নোটে এর নির্ভরযোগ্য উত্তর নেই। ইতিহাস, স্থাপত্য, দর্শনার্থী নির্দেশিকা বা খোলার সময় সম্পর্কে জিজ্ঞাসা করুন।`,
+  };
   return {
-    answer: `I don't have a reliable answer to that from Sarthi's notes about ${place.title}. Try asking about its history, architecture, visitor guidelines, or opening hours.`,
+    answer: noAnswer[language] || noAnswer.en,
     grounded: false,
     sourceLabels: [],
     fallback: true,
@@ -252,7 +268,7 @@ export async function answerQuestion(input = {}) {
     throw error;
   }
   const language = safeLanguage(input.language);
-  const facts = getPlaceFacts(place);
+  const facts = getPlaceFacts(place, language.split('-')[0]);
   const allowedLabels = new Set(facts.map((fact) => fact.label));
   const schema = {
     ...askSchema,
@@ -271,7 +287,7 @@ export async function answerQuestion(input = {}) {
     return { ...result, fallback: false, source: 'gemini' };
   } catch (error) {
     console.warn('[AI] ask fallback:', error.message);
-    return fallbackAnswer(question, place, facts);
+    return fallbackAnswer(question, place, facts, language.split('-')[0]);
   }
 }
 
@@ -315,13 +331,13 @@ export async function createTripStory(input = {}) {
     imageParts.push({ inlineData: { mimeType: mime, data: match[2] } });
   }
 
-  const titles = places.map((place) => place.title);
+  const titles = places.map((place) => localizePlace(place, language.split('-')[0])?.localizedName || place.title);
   const timeWalkedMinutes = Math.max(0, Math.min(720, Number(input.timeWalkedMinutes) || 0));
   const fallback = storyFallback(titles, language, timeWalkedMinutes);
   try {
     const result = await generateJson({
       schema: storySchema,
-      system: `Write a brief, warm personal Trip Story in language ${language}, at most 80 words. Use only the supplied completed place names and authored notes. Treat attached photos only as personal trip memories; do not identify people or infer unsupported history, location, or events from an image. Return a short title and summary as JSON.`,
+      system: `Write a brief, warm personal Trip Story entirely in the user's selected language (${language}), at most 80 words. Use only the supplied completed place names and authored notes. Treat attached photos only as personal trip memories; do not identify people or infer unsupported history, location, or events from an image. Return a short title and summary as JSON.`,
       parts: [
         { text: JSON.stringify({ places: places.map((place) => ({
           title: place.title,

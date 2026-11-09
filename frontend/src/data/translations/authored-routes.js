@@ -113,6 +113,50 @@ const authoredRoutes = {
       ],
       guidelines: { dressCode: 'আরামদায়ক, আবহাওয়া উপযোগী পোশাক পরুন এবং ASI-এর বর্তমান নির্দেশ মানুন।', footwear: 'এখানে দীর্ঘ বাইরের পথ ও অসম ঐতিহাসিক পৃষ্ঠ আছে; আরামদায়ক জুতো পরুন।', bagsAndCameras: 'ব্যাগ পরীক্ষা ও ছবি তোলার নিয়ম বদলাতে পারে। প্রবেশের আগে নোটিস দেখুন।', security: 'নিরাপত্তা পরীক্ষার জন্য সময় রাখুন। স্মৃতিস্তম্ভে উঠবেন না বা স্পর্শ করবেন না।', ticketCounter: 'প্রবেশ টিকিট Guide Pass থেকে আলাদা। বর্তমান মূল্য ASI পোর্টাল বা কাউন্টারে যাচাই করুন।', hours: 'অ্যাপে ৭:০০–৫:০০ দেখানো হয়েছে। আজকের সময় সাইটে যাচাই করুন।', notice: 'সংরক্ষণ কাজ বা অনুষ্ঠানে পথ বদলাতে পারে। বর্তমান ASI নির্দেশ মানুন।' }
     }
+  },
+  'humayun-tomb': {
+    hi: { route: [
+      // TRANSLATION-REVIEW: Hindi Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'पश्चिमी द्वार', direction: 'पश्चिमी द्वार के केंद्रीय मेहराब से बगीचे की धुरी की ओर जाएँ।', storyChapter: 'पश्चिमी द्वार प्रवेश', tip: 'मेहराब के नीचे रुककर सामने के दृश्य को देखें, फिर बगीचे में आगे बढ़ें।' },
+      // TRANSLATION-REVIEW: Hindi Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'चारबाग उद्यान', direction: 'चारबाग की जल-नहरों के साथ बगीचे के रास्तों से मकबरे की ओर बढ़ें।', storyChapter: 'चारबाग उद्यान', tip: 'चिह्नित रास्तों पर रहें और नहरों के पास दूसरे यात्रियों को जगह दें।' },
+      // TRANSLATION-REVIEW: Hindi Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'ऊँचा चबूतरा और दोहरा गुंबद', direction: 'मुख्य मकबरे की ओर बने रास्ते पर जाएँ और केंद्रीय चबूतरे तक पहुँचने के लिए दर्शक सीढ़ियों का उपयोग करें।', storyChapter: 'ऊँचा चबूतरा और दोहरा गुंबद', tip: 'सीढ़ियाँ आराम से चढ़ें; चबूतरे पर रुककर गुंबद और पत्थर का काम देखें।' },
+      // TRANSLATION-REVIEW: Hindi Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'ईसा खान परिसर', direction: 'मुख्य मकबरे से ईसा खान परिसर की ओर जाने वाले चिह्नित बगीचे के रास्ते का पालन करें।', storyChapter: 'नाई का मकबरा और ईसा खान परिसर', tip: 'यह परिसर अलग ऐतिहासिक जगह है। धीरे बोलें और वहाँ मौजूद लोगों का सम्मान करें।' },
+    ] },
+    ta: { route: [
+      // TRANSLATION-REVIEW: Tamil Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'மேற்கு நுழைவாயில்', direction: 'மேற்கு நுழைவாயிலின் மைய வளைவு வழியாகத் தோட்டத்தின் அச்சை நோக்கிச் செல்லுங்கள்.', storyChapter: 'மேற்கு நுழைவாயில்', tip: 'வளைவின் கீழ் நின்று முன்னோக்குத் தோற்றத்தைக் கவனித்துப் பின்னர் தோட்டத்திற்குள் செல்லுங்கள்.' },
+      // TRANSLATION-REVIEW: Tamil Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'சார்பாக் தோட்டங்கள்', direction: 'சார்பாக் நீர்வழிக் கோடுகளைப் பின்பற்றி தோட்டப் பாதையில் கல்லறையை நோக்கிச் செல்லுங்கள்.', storyChapter: 'சார்பாக் தோட்டங்கள்', tip: 'குறிக்கப்பட்ட பாதையில் இருங்கள்; நீர்வழி அருகே மற்றவர்களுக்கும் இடம் விடுங்கள்.' },
+      // TRANSLATION-REVIEW: Tamil Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'உயர்ந்த மேடை மற்றும் இரட்டை குவிமாடம்', direction: 'முக்கிய கல்லறைக்கான பாதையைப் பின்பற்றி, மைய மேடையை அடைய பார்வையாளர் படிகளைப் பயன்படுத்துங்கள்.', storyChapter: 'உயர்ந்த மேடை மற்றும் இரட்டை குவிமாடம்', tip: 'படிகளில் மெதுவாகச் செல்லுங்கள்; மேடையில் நின்று குவிமாடத்தையும் கல் வேலைப்பாடுகளையும் பாருங்கள்.' },
+      // TRANSLATION-REVIEW: Tamil Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'ஈசா கான் வளாகம்', direction: 'முக்கிய கல்லறையிலிருந்து ஈசா கான் வளாகத்துக்குச் செல்லும் குறிக்கப்பட்ட தோட்டப் பாதையைப் பின்பற்றுங்கள்.', storyChapter: 'முடி திருத்துபவர் கல்லறையும் ஈசா கான் வளாகமும்', tip: 'இது தனித்த வரலாற்று வளாகம். மெதுவாகப் பேசுங்கள்; அங்குள்ளவர்களை மதியுங்கள்.' },
+    ] },
+    bn: { route: [
+      // TRANSLATION-REVIEW: Bengali Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'পশ্চিমি প্রবেশদ্বার', direction: 'পশ্চিমি প্রবেশদ্বারের মাঝের খিলান পেরিয়ে বাগানের অক্ষ বরাবর এগোন।', storyChapter: 'পশ্চিমি প্রবেশদ্বার', tip: 'খিলানের নিচে থেমে সামনের দৃশ্যটি দেখুন, তারপর বাগানে এগিয়ে যান।' },
+      // TRANSLATION-REVIEW: Bengali Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'চারবাগ উদ্যান', direction: 'চারবাগের জলপথ বরাবর বাগানের রাস্তা দিয়ে সমাধির দিকে এগিয়ে যান।', storyChapter: 'চারবাগ উদ্যান', tip: 'চিহ্নিত পথে থাকুন এবং জলপথের পাশে অন্যদের জায়গা দিন।' },
+      // TRANSLATION-REVIEW: Bengali Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'উঁচু চত্বর ও দ্বৈত গম্বুজ', direction: 'মূল সমাধির পথ ধরে যান; কেন্দ্রীয় চত্বরে উঠতে দর্শনার্থীদের সিঁড়ি ব্যবহার করুন।', storyChapter: 'উঁচু চত্বর ও দ্বৈত গম্বুজ', tip: 'ধীরে সিঁড়ি উঠুন; চত্বরে থেমে গম্বুজ ও পাথরের কাজ দেখুন।' },
+      // TRANSLATION-REVIEW: Bengali Humayun's Tomb route; verify names and visitor wording.
+      // VERIFY-ONSITE: confirm this direction against current visitor access.
+      { name: 'ঈসা খাঁ প্রাঙ্গণ', direction: 'মূল সমাধি থেকে ঈসা খাঁ প্রাঙ্গণের দিকে চিহ্নিত বাগানের পথ অনুসরণ করুন।', storyChapter: 'নাপিতের সমাধি ও ঈসা খাঁ প্রাঙ্গণ', tip: 'এটি আলাদা ঐতিহাসিক প্রাঙ্গণ। নিচু স্বরে কথা বলুন এবং সেখানে থাকা মানুষদের সম্মান করুন।' },
+    ] }
   }
 };
 export default authoredRoutes;
