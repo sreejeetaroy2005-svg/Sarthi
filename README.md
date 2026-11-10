@@ -2,6 +2,12 @@
 
 > A live AI guide that sees where you are, speaks your mother tongue, and re-plans your day as it happens.
 
+## Solution pitch
+
+A traveler should not have to go 2,000 km to find a guide who speaks their language. Sarthi is a voice-first companion for India’s heritage sites: it helps plan the day, guides travelers through each stop, answers spoken questions in their language, and adapts what comes next as the day unfolds.
+
+[Read the Sarthi solution pitch](sarthi-pitch-updated.pdf).
+
 [![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Vite 5](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
 [![Gnani](https://img.shields.io/badge/Voice-Gnani-176B87)](https://vachana.ai/)
