@@ -19,9 +19,10 @@ const DIST_PATH = fs.existsSync(path.resolve(__dirname, '../frontend/dist'))
   : path.resolve(__dirname, 'dist');
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 20;
+const GNANI_RATE_LIMIT_MAX = 60;
 const rateBuckets = new Map();
 
-function isRateLimited(key) {
+function isRateLimited(key, limit = RATE_LIMIT_MAX) {
   const now = Date.now();
   let bucket = rateBuckets.get(key);
   if (!bucket || now - bucket.startedAt >= RATE_LIMIT_WINDOW_MS) {
@@ -34,7 +35,7 @@ function isRateLimited(key) {
     }
   }
   bucket.count += 1;
-  return bucket.count > RATE_LIMIT_MAX;
+  return bucket.count > limit;
 }
 
 function readBody(req, limitBytes) {
@@ -82,8 +83,11 @@ async function startServer() {
 
     app.use(cors({ origin: config.corsOrigin }));
     app.use('/api', (req, res, next) => {
-      const key = `${req.ip || req.socket.remoteAddress}:${req.path.startsWith('/ai') ? 'ai' : 'gnani'}`;
-      if (isRateLimited(key)) return res.status(429).json({ error: 'Too many requests. Please wait a moment and try again.' });
+      const isAi = req.path.startsWith('/ai');
+      const key = `${req.ip || req.socket.remoteAddress}:${isAi ? 'ai' : 'gnani'}`;
+      if (isRateLimited(key, isAi ? RATE_LIMIT_MAX : GNANI_RATE_LIMIT_MAX)) {
+        return res.status(429).json({ error: 'Too many requests. Please wait a moment and try again.' });
+      }
       next();
     });
 
@@ -127,6 +131,11 @@ async function startServer() {
         console.error('[TTS Error]', err.message);
         return res.status(err.status || 500).json({ error: err.message });
       }
+    });
+
+    app.post('/api/gnani/cache-check', express.json({ limit: '256kb' }), (req, res) => {
+      const payloads = Array.isArray(req.body?.payloads) ? req.body.payloads : [];
+      return res.json({ cached: gnaniService.getCachedSpeechStatus(payloads) });
     });
 
     app.post('/api/gnani/stt', express.raw({ type: 'multipart/form-data', limit: '12mb' }), async (req, res) => {
@@ -222,7 +231,8 @@ function startNativeServer() {
 
     if (req.method === 'POST' && pathname.startsWith('/api/')) {
       const category = pathname.startsWith('/api/ai/') ? 'ai' : 'gnani';
-      if (isRateLimited(`${req.socket.remoteAddress}:${category}`)) {
+      const limit = category === 'ai' ? RATE_LIMIT_MAX : GNANI_RATE_LIMIT_MAX;
+      if (isRateLimited(`${req.socket.remoteAddress}:${category}`, limit)) {
         return sendJson(res, 429, { error: 'Too many requests. Please wait a moment and try again.' });
       }
     }
@@ -269,6 +279,18 @@ function startNativeServer() {
       } catch (err) {
         console.error('[TTS Error]', err.message);
         return sendJson(res, err.status || 500, { error: err.message });
+      }
+    }
+
+    // POST /api/gnani/cache-check
+    if (req.method === 'POST' && pathname === '/api/gnani/cache-check') {
+      try {
+        const raw = await readBody(req, 256 * 1024);
+        const body = JSON.parse(raw.toString('utf8') || '{}');
+        const payloads = Array.isArray(body.payloads) ? body.payloads : [];
+        return sendJson(res, 200, { cached: gnaniService.getCachedSpeechStatus(payloads) });
+      } catch (err) {
+        return sendJson(res, err.status || 400, { error: err.message });
       }
     }
 

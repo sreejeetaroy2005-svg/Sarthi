@@ -3,8 +3,7 @@ import { synthesize } from '../lib/gnaniClient';
 import { mergeChapterTranslations } from '../data/translations';
 
 /**
- * AudioPlayerModal — plays monument audio chapters using Gnani TTS,
- * falling back to Web Speech API if the Gnani API fails.
+ * AudioPlayerModal — plays monument audio chapters using Gnani TTS.
  *
  * Props:
  *   monument      - monument object from monuments.js
@@ -19,6 +18,7 @@ export default function AudioPlayerModal({
   onClose,
   onNarrationEnd,
   autoPlay = false,
+  onLanguageChange,
 }) {
   const [activeChapterIndex, setActiveChapterIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -26,8 +26,9 @@ export default function AudioPlayerModal({
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showTranscript, setShowTranscript] = useState(false);
-  const [audioMode, setAudioMode] = useState('loading'); // 'gnani' | 'tts' | 'real' | 'loading'
+  const [audioMode, setAudioMode] = useState('loading'); // 'gnani' | 'real' | 'loading' | 'error'
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [audioError, setAudioError] = useState('');
 
   // Merge translated chapters if a non-English language is selected
   const rawChapters = monument.audioChapters || [];
@@ -46,12 +47,6 @@ export default function AudioPlayerModal({
   // HTML5 audio element ref (for both real .mp3 and Gnani TTS blob playback)
   const audioRef = useRef(null);
 
-  // Web Speech API fallback refs (TTS mode)
-  const speechUtteranceRef = useRef(null);
-  const ttsTimerRef = useRef(null);
-  const ttsDurationRef = useRef(120);
-  const [ttsElapsed, setTtsElapsed] = useState(0);
-
   // Track whether auto-play has been triggered
   const autoPlayTriggered = useRef(false);
 
@@ -65,23 +60,13 @@ export default function AudioPlayerModal({
     if (hasRealAudio) {
       setAudioMode('real');
     } else {
-      // We'll try Gnani TTS first, falling back to Web Speech
+      // Chapters without authored audio are synthesized through Gnani.
       setAudioMode('loading');
     }
 
     setCurrentTime(0);
     setDuration(0);
-    setTtsElapsed(0);
     setIsPlaying(false);
-
-    // Stop any running speech synthesis
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    if (ttsTimerRef.current) {
-      clearInterval(ttsTimerRef.current);
-      ttsTimerRef.current = null;
-    }
 
     // Reset the HTML5 audio src
     if (audioRef.current) {
@@ -89,9 +74,12 @@ export default function AudioPlayerModal({
       if (hasRealAudio) {
         audioRef.current.src = activeChapter.audioSrc;
         audioRef.current.load();
+      } else {
+        audioRef.current.removeAttribute('src');
+        audioRef.current.load();
       }
     }
-  }, [activeChapterIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeChapterIndex, userLanguage, activeTranscript]);
 
   // ─── Try Gnani TTS when mode is 'loading' ───────────────────────
   // Only the chapter being played is ever requested — no prefetching of
@@ -110,6 +98,7 @@ export default function AudioPlayerModal({
 
     const controller = new AbortController();
     ttsRequestRef.current = { key: requestKey, controller };
+    setAudioError('');
     setIsLoadingAudio(true);
 
     synthesize(activeTranscript, userLanguage, { signal: controller.signal })
@@ -124,8 +113,9 @@ export default function AudioPlayerModal({
       })
       .catch((err) => {
         if (controller.signal.aborted || err?.name === 'AbortError') return;
-        console.warn('Gnani TTS failed, falling back to Web Speech:', err.message);
-        setAudioMode('tts');
+        console.warn('Gnani TTS failed:', err.message);
+        setAudioError('Gnani narration could not load. Check the connection and try again.');
+        setAudioMode('error');
         setIsLoadingAudio(false);
       });
 
@@ -180,55 +170,14 @@ export default function AudioPlayerModal({
     }
   }, [playbackRate]);
 
-  // ─── TTS mode: play/pause/timer ──────────────────────────────────
   useEffect(() => {
-    if (audioMode !== 'tts') return;
-
-    if (isPlaying) {
-      if (activeChapter?.duration) {
-        const parts = activeChapter.duration.split(':');
-        ttsDurationRef.current = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-      }
-      setDuration(ttsDurationRef.current);
-
-      startWebSpeechTTS();
-
-      ttsTimerRef.current = setInterval(() => {
-        setTtsElapsed((prev) => {
-          const next = prev + 1;
-          if (next >= ttsDurationRef.current) {
-            clearInterval(ttsTimerRef.current);
-            ttsTimerRef.current = null;
-            handleNextChapter();
-            return 0;
-          }
-          return next;
-        });
-      }, 1000 / playbackRate);
-    } else {
-      if (ttsTimerRef.current) {
-        clearInterval(ttsTimerRef.current);
-        ttsTimerRef.current = null;
-      }
-      if (window.speechSynthesis) {
-        window.speechSynthesis.pause();
-      }
-    }
-
-    return () => {
-      if (ttsTimerRef.current) {
-        clearInterval(ttsTimerRef.current);
-        ttsTimerRef.current = null;
-      }
-    };
-  }, [isPlaying, audioMode, activeChapterIndex, playbackRate]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Sync TTS elapsed time to currentTime display
-  useEffect(() => {
-    if (audioMode === 'tts') {
-      setCurrentTime(ttsElapsed);
-    }
-  }, [ttsElapsed, audioMode]);
+    if (!isPlaying || !['real', 'gnani'].includes(audioMode) || !audioRef.current) return;
+    audioRef.current.play().catch((error) => {
+      console.warn('Audio playback failed:', error.message);
+      setAudioError('Narration loaded but could not play. Tap play to retry.');
+      setIsPlaying(false);
+    });
+  }, [isPlaying, audioMode, activeChapterIndex]);
 
   // ─── Cleanup on unmount ───────────────────────────────────────────
   useEffect(() => {
@@ -236,33 +185,8 @@ export default function AudioPlayerModal({
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-      if (ttsTimerRef.current) {
-        clearInterval(ttsTimerRef.current);
-      }
     };
   }, []);
-
-  // ─── TTS helpers ──────────────────────────────────────────────────
-  const startWebSpeechTTS = () => {
-    if (!window.speechSynthesis || !activeChapter) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(activeChapter.transcript);
-    utterance.rate = playbackRate;
-
-    // Try to pick a voice matching the language
-    const voices = window.speechSynthesis.getVoices();
-    const langLocale = userLanguage === 'hi' ? 'hi' : userLanguage === 'ta' ? 'ta' : userLanguage === 'bn' ? 'bn' : 'en';
-    const voice = voices.find((v) => v.lang.includes(langLocale)) ||
-                  voices.find((v) => v.lang.includes('en-IN') || v.lang.includes('en-GB') || v.lang.includes('en'));
-    if (voice) utterance.voice = voice;
-
-    utterance.onend = () => setIsPlaying(false);
-    speechUtteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
-  };
 
   // ─── Playback controls ────────────────────────────────────────────
   const handlePlayPause = () => {
@@ -274,29 +198,14 @@ export default function AudioPlayerModal({
       if (isPlaying) {
         audio.pause();
       } else {
-        audio.play().catch(() => {});
-      }
-    } else {
-      // TTS mode
-      if (isPlaying) {
-        setIsPlaying(false);
-      } else {
-        if (window.speechSynthesis?.paused) {
-          window.speechSynthesis.resume();
-          setIsPlaying(true);
-        } else {
-          setIsPlaying(true);
-        }
+        setAudioError('');
+        setIsPlaying(true);
       }
     }
   };
 
   const handleNextChapter = useCallback(() => {
     if (audioRef.current) audioRef.current.pause();
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-    if (ttsTimerRef.current) { clearInterval(ttsTimerRef.current); ttsTimerRef.current = null; }
-
-    setTtsElapsed(0);
     if (activeChapterIndex < chapters.length - 1) {
       setActiveChapterIndex((prev) => prev + 1);
       setTimeout(() => setIsPlaying(true), 150);
@@ -309,10 +218,6 @@ export default function AudioPlayerModal({
 
   const handlePrevChapter = () => {
     if (audioRef.current) audioRef.current.pause();
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-    if (ttsTimerRef.current) { clearInterval(ttsTimerRef.current); ttsTimerRef.current = null; }
-
-    setTtsElapsed(0);
     if (activeChapterIndex > 0) {
       setActiveChapterIndex((prev) => prev - 1);
       setTimeout(() => setIsPlaying(true), 150);
@@ -327,24 +232,18 @@ export default function AudioPlayerModal({
     if ((audioMode === 'real' || audioMode === 'gnani') && audioRef.current) {
       audioRef.current.currentTime = targetTime;
       setCurrentTime(targetTime);
-    } else {
-      setTtsElapsed(Math.floor(targetTime));
     }
   };
 
   const seekForward = () => {
     if ((audioMode === 'real' || audioMode === 'gnani') && audioRef.current) {
       audioRef.current.currentTime = Math.min(audioRef.current.currentTime + 10, duration);
-    } else {
-      setTtsElapsed((prev) => Math.min(prev + 10, ttsDurationRef.current));
     }
   };
 
   const seekBackward = () => {
     if ((audioMode === 'real' || audioMode === 'gnani') && audioRef.current) {
       audioRef.current.currentTime = Math.max(audioRef.current.currentTime - 10, 0);
-    } else {
-      setTtsElapsed((prev) => Math.max(prev - 10, 0));
     }
   };
 
@@ -359,8 +258,6 @@ export default function AudioPlayerModal({
 
   const handleClose = () => {
     if (audioRef.current) audioRef.current.pause();
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-    if (ttsTimerRef.current) clearInterval(ttsTimerRef.current);
     onClose();
   };
 
@@ -380,7 +277,7 @@ export default function AudioPlayerModal({
     if (isLoadingAudio) return { label: 'Loading…', color: 'bg-amber-100 text-amber-700 border-amber-200' };
     if (audioMode === 'gnani') return { label: 'Gnani AI', color: 'bg-green-100 text-green-700 border-green-200' };
     if (audioMode === 'real') return { label: 'AI Voice', color: 'bg-green-100 text-green-700 border-green-200' };
-    return { label: 'TTS Fallback', color: 'bg-surface-container text-outline border-outline-variant/30' };
+    return { label: 'Unavailable', color: 'bg-red-100 text-red-700 border-red-200' };
   })();
 
   if (!activeChapter) return null;
@@ -435,6 +332,20 @@ export default function AudioPlayerModal({
           </div>
         </div>
 
+        <div className="px-6 pb-3 flex items-center justify-center gap-2" aria-label="Narration language">
+          {[['en', 'English'], ['hi', 'हिन्दी'], ['ta', 'தமிழ்'], ['bn', 'বাংলা']].map(([code, label]) => (
+            <button
+              key={code}
+              type="button"
+              onClick={() => onLanguageChange?.(code)}
+              aria-pressed={userLanguage === code}
+              className={`rounded-full border px-3 py-1.5 text-[10px] font-bold ${userLanguage === code ? 'border-primary bg-primary text-white' : 'border-outline-variant/50 text-primary hover:bg-surface-container-low'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Monument / Chapter info */}
         <div className="p-6 text-center space-y-4 shrink-0">
           <div className="w-24 h-24 rounded-2xl overflow-hidden mx-auto shadow-md border border-outline-variant/30 bg-surface">
@@ -457,6 +368,11 @@ export default function AudioPlayerModal({
               <span className="material-symbols-outlined text-sm animate-pulse">auto_awesome</span>
               <span>Sarthi is preparing your guide…</span>
             </div>
+          </div>
+        )}
+        {audioError && (
+          <div role="alert" className="mx-6 mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-center text-xs font-semibold text-red-800">
+            {audioError}
           </div>
         )}
 
@@ -489,9 +405,6 @@ export default function AudioPlayerModal({
                     key={ch.id}
                     onClick={() => {
                       if (audioRef.current) audioRef.current.pause();
-                      if (window.speechSynthesis) window.speechSynthesis.cancel();
-                      if (ttsTimerRef.current) { clearInterval(ttsTimerRef.current); ttsTimerRef.current = null; }
-                      setTtsElapsed(0);
                       setActiveChapterIndex(idx);
                       setTimeout(() => setIsPlaying(true), 150);
                     }}

@@ -417,6 +417,10 @@ export async function transcribe(wavBlob, options = {}) {
       'STT'
     );
 
+    if (res.headers.get('X-Sarthi-Mock-Mode') === 'true') {
+      throw new Error('Gnani is in mock mode; mock transcription is disabled.');
+    }
+
     const data = await res.json();
     return {
       transcript: data.transcript || '',

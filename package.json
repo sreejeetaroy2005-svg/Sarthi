@@ -8,7 +8,7 @@
     "backend"
   ],
   "scripts": {
-    "dev": "node -e \"import('child_process').then(cp => { cp.spawn('npm', ['run', 'dev', '--prefix', 'backend'], { stdio: 'inherit', shell: true }); cp.spawn('npm', ['run', 'dev', '--prefix', 'frontend'], { stdio: 'inherit', shell: true }); })\"",
+    "dev": "node -e \"import('child_process').then(cp => { const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'; cp.spawn(npm, ['run', 'dev', '--prefix', 'backend'], { stdio: 'inherit' }); cp.spawn(npm, ['run', 'dev', '--prefix', 'frontend'], { stdio: 'inherit' }); })\"",
     "dev:frontend": "npm run dev --prefix frontend",
     "dev:backend": "npm run dev --prefix backend",
     "frontend": "npm run dev --prefix frontend",
@@ -18,6 +18,7 @@
     "start": "npm start --prefix backend",
     "install:all": "npm install --prefix frontend && npm install --prefix backend",
     "generate-audio": "node scripts/generate-audio.mjs",
-    "update-audio-srcs": "node scripts/update-audio-srcs.mjs"
+    "update-audio-srcs": "node scripts/update-audio-srcs.mjs",
+    "warm-demo": "node scripts/warm-demo.mjs"
   }
 }

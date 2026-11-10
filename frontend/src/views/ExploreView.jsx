@@ -253,6 +253,12 @@ export default function ExploreView({
             </span>
           </div>
 
+          {isSimulated && (
+            <span className="inline-flex rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-[10px] font-bold text-amber-900">
+              Simulated location
+            </span>
+          )}
+
           {hasResumableTrip && (
             <button onClick={onResumeTrip} className="w-full min-h-12 rounded-2xl bg-secondary/10 border border-secondary/25 px-4 py-3 text-left flex items-center justify-between gap-3">
               <span><span className="block text-xs font-bold text-primary">Continue your trip</span><span className="block text-[10px] text-on-surface-variant mt-0.5">Pick up where you left off</span></span>

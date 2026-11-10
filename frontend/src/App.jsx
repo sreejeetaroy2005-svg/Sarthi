@@ -41,6 +41,38 @@ import { writeTripStory } from './lib/aiClient';
 const TRIP_STARTED_KEY = 'sarthi_trip_started';
 const LANGUAGE_CHOSEN_KEY = 'sarthi_language_chosen';
 
+function seedDemoMode() {
+  const monument = MONUMENTS.find((place) => place.id === 'humayun-tomb');
+  if (!monument) return;
+  localStorage.setItem(LANGUAGE_CHOSEN_KEY, 'true');
+  localStorage.removeItem(TRIP_STARTED_KEY);
+  localStorage.setItem('sarthi_planning_step', 'dashboard');
+  localStorage.setItem('sarthi_hands_free', 'true');
+  localStorage.setItem('sarthi_user_profile', JSON.stringify({ ...DEFAULT_USER_PROFILE, language: 'en' }));
+  localStorage.setItem('sarthi_user_location', JSON.stringify({ ...monument.coords, name: 'Humayun’s Tomb (simulated)', isSimulated: true }));
+  localStorage.setItem('sarthi_trip_setup', JSON.stringify({
+    ...normalizeSetup(DEFAULT_TRIP_SETUP),
+    destination: { city: 'New Delhi', cities: ['New Delhi'] },
+    days: 1,
+    mode: 'manual',
+    group: { tripType: 'solo', counts: { adults: 1, children: 0, seniors: 0 }, needs: [], pace: 'moderate' },
+    placeIds: [monument.id],
+  }));
+  localStorage.setItem('sarthi_day_plan', JSON.stringify([monument]));
+  localStorage.setItem('sarthi_itinerary', JSON.stringify({ days: [], totals: { stops: 0 } }));
+  localStorage.setItem('sarthi_entitlements', JSON.stringify(readEntitlements()));
+  localStorage.removeItem('sarthi_travel_progress');
+}
+
+function GnaniStatusBanner({ connected }) {
+  if (connected !== false) return null;
+  return (
+    <div role="status" className="fixed top-3 left-1/2 -translate-x-1/2 z-[120] rounded-full border border-red-300 bg-red-50 px-4 py-2 text-xs font-bold text-red-800 shadow-lg">
+      Gnani voice not connected
+    </div>
+  );
+}
+
 function readSavedItinerary() {
   try {
     const saved = localStorage.getItem('sarthi_itinerary');
@@ -116,6 +148,7 @@ async function compressMemoryPhoto(file) {
  * the first unanswered step.
  */
 function readInitialStep() {
+  if (new URLSearchParams(window.location.search).get('demo') === '1') return 'dashboard';
   const travel = readTravelProgress();
   if (travel.placeId && ['getting_there', 'arrival_briefing', 'photo_checkin', 'guided_walk', 'travel_access', 'what_next', 'trip_summary', 'trip_story'].includes(travel.step)) return travel.step;
   if (localStorage.getItem(TRIP_STARTED_KEY) === 'true') return 'dashboard';
@@ -129,6 +162,14 @@ function readInitialStep() {
 }
 
 export default function App() {
+  const isDemoMode = new URLSearchParams(window.location.search).get('demo') === '1';
+  const demoSeededRef = useRef(false);
+  if (isDemoMode && !demoSeededRef.current) {
+    seedDemoMode();
+    demoSeededRef.current = true;
+  }
+  const [demoStartConfirmed, setDemoStartConfirmed] = useState(!isDemoMode);
+
   // Planning flow (strict order):
   // language -> destination -> days -> mode -> group -> places -> itinerary -> overview -> passes -> travel day
   const [step, setStep] = useState(readInitialStep);
@@ -158,6 +199,7 @@ export default function App() {
 
   // App Core state (Persistent via LocalStorage)
   const [userProfile, setUserProfile] = useState(() => {
+    if (isDemoMode) return { ...DEFAULT_USER_PROFILE, language: 'en' };
     const saved = localStorage.getItem('sarthi_user_profile');
     if (saved) {
       const parsed = JSON.parse(saved);
@@ -223,6 +265,26 @@ export default function App() {
   const [clockPulse, setClockPulse] = useState(0);
   const [storyLoading, setStoryLoading] = useState(false);
   const [storyError, setStoryError] = useState('');
+  const [gnaniConnected, setGnaniConnected] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/gnani/health')
+      .then((response) => {
+        if (!response.ok) throw new Error(`health returned ${response.status}`);
+        return response.json();
+      })
+      .then((health) => {
+        const connected = health.gnaniConfigured === true && health.mockMode !== true;
+        console.info(`[Gnani] real Gnani ${connected ? 'active' : 'inactive'} (mockMode=${Boolean(health.mockMode)})`);
+        if (active) setGnaniConnected(connected);
+      })
+      .catch((error) => {
+        console.warn('[Gnani] health check failed; real Gnani is inactive:', error.message);
+        if (active) setGnaniConnected(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('sarthi_planning_step', step);
@@ -257,6 +319,7 @@ export default function App() {
 
   // ─── Hands-free: auto-trigger narration on proximity ──────────────
   useEffect(() => {
+    if (isDemoMode && !demoStartConfirmed) return;
     if (!handsFreeSetting || !currentCoords || step !== 'dashboard' || audioMonument || arMonument) return;
 
     let closestMon = null;
@@ -282,7 +345,7 @@ export default function App() {
         showToast(`Starting narration for ${closestMon.title}`, 'headphones');
       }
     }
-  }, [currentCoords, handsFreeSetting, step, audioMonument, arMonument]);
+  }, [currentCoords, handsFreeSetting, step, audioMonument, arMonument, isDemoMode, demoStartConfirmed]);
 
   // ─── Narration end handler (hands-free flow) ──────────────────────
   const handleNarrationEnd = () => {
@@ -415,6 +478,11 @@ export default function App() {
     setPlanScreen('day');
     setActiveTab('explore');
     setStep('dashboard');
+  };
+
+  const openAudioGuide = (monument) => {
+    setAutoPlayNarration(isDemoMode);
+    setAudioMonument(monument);
   };
 
   const handleConfirmStartLocation = (location) => {
@@ -710,6 +778,11 @@ export default function App() {
   };
 
   const handleStartTrip = () => {
+    if (isDemoMode && !travel.placeId) {
+      setActiveTab('explore');
+      setStep('dashboard');
+      return;
+    }
     const firstStop = (itinerary?.days || []).find((day) => day.stops.length)?.stops[0];
     const place = MONUMENTS.find((candidate) => candidate.id === firstStop?.id);
     if (!place) {
@@ -1021,6 +1094,8 @@ export default function App() {
   // Render active popup overlay screens if triggered
   if (arMonument) {
     return (
+      <>
+      <GnaniStatusBanner connected={gnaniConnected} />
       <LiveGuideView
         monument={arMonument}
         userLanguage={userLanguage}
@@ -1028,19 +1103,23 @@ export default function App() {
         onShowToast={showToast}
         showMicPrompt={showMicPromptInGuide}
       />
+      </>
     );
   }
 
   if (storyMonument) {
     return (
+      <>
+      <GnaniStatusBanner connected={gnaniConnected} />
       <LandmarkStoryView
         monument={storyMonument}
         onClose={() => setStoryMonument(null)}
         onOpenAudioGuide={(m) => {
           setStoryMonument(null);
-          setAudioMonument(m);
+          openAudioGuide(m);
         }}
       />
+      </>
     );
   }
 
@@ -1056,6 +1135,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col justify-between selection:bg-primary selection:text-on-primary">
+      <GnaniStatusBanner connected={gnaniConnected} />
 
       {/* Toast Notification Banner */}
       {toast && (
@@ -1070,6 +1150,23 @@ export default function App() {
         </div>
       )}
 
+      {isDemoMode && !demoStartConfirmed && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-primary/70 backdrop-blur-sm p-6">
+          <section role="dialog" aria-modal="true" aria-labelledby="demo-start-title" className="w-full max-w-sm rounded-3xl border border-white/30 bg-white p-6 text-center shadow-2xl">
+            <p className="text-[10px] font-bold uppercase tracking-[.18em] text-secondary">Humayun’s Tomb · Audio Demo</p>
+            <h1 id="demo-start-title" className="mt-2 font-display text-2xl font-bold text-primary">Ready to explore?</h1>
+            <button
+              type="button"
+              autoFocus
+              onClick={() => setDemoStartConfirmed(true)}
+              className="mt-5 min-h-12 w-full rounded-2xl bg-primary px-5 py-3 text-sm font-bold text-on-primary shadow-md hover:bg-primary-container"
+            >
+              Tap to start the demo
+            </button>
+          </section>
+        </div>
+      )}
+
       {/* Top Navbar layout (Desktop only) */}
       <Header activeTab={activeTab} setActiveTab={setActiveTab} userProfile={userProfile} />
 
@@ -1081,7 +1178,7 @@ export default function App() {
           <LandmarkDetailView
             monument={selectedMonument}
             onBack={() => setSelectedMonument(null)}
-            onOpenAudioGuide={(m) => setAudioMonument(m)}
+            onOpenAudioGuide={openAudioGuide}
             onOpenLiveGuide={(m) => setArMonument(m)}
             onAddToDayPlan={handleAddToDayPlan}
             onOpenStory={(m) => setStoryMonument(m)}
@@ -1099,7 +1196,7 @@ export default function App() {
                 onAddToDayPlan={handleAddToDayPlan}
                 onOpenLiveGuide={(m) => setArMonument(m)}
                 onOpenStory={(m) => setStoryMonument(m)}
-                onOpenAudioGuide={(m) => setAudioMonument(m)}
+                onOpenAudioGuide={openAudioGuide}
                 userLocation={currentCoords}
                 isSimulated={isSimulated}
                 setSimulatedCoords={setSimulatedCoords}
@@ -1194,6 +1291,7 @@ export default function App() {
           onClose={() => { setAudioMonument(null); setAutoPlayNarration(false); }}
           onNarrationEnd={handleNarrationEnd}
           autoPlay={autoPlayNarration}
+          onLanguageChange={(language) => setUserProfile((profile) => ({ ...profile, language }))}
         />
       )}
 

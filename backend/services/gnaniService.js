@@ -6,11 +6,10 @@
 
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
-import { generateMockWav, getMockTranscription } from './mockService.js';
 
 const isRetryableStatus = (status) => status === 429 || status >= 500;
 const ttsMemoryCache = new Map();
-const TTS_CACHE_MAX = 12;
+const TTS_CACHE_MAX = 64;
 
 // ─────────────────────────────────────────────────────────────────────
 // Global FIFO queue — Gnani allows ONE active request at a time
@@ -105,13 +104,9 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
  */
 export async function synthesizeSpeech(ttsPayload) {
   if (!config.isKeyConfigured()) {
-    console.warn('[GnaniService] GNANI_API_KEY is not configured in .env. Returning mock WAV audio.');
-    const mockWav = generateMockWav(1.5, 24000);
-    return {
-      buffer: mockWav,
-      contentType: 'audio/wav',
-      isMock: true,
-    };
+    const error = new Error('Gnani voice is not connected. Configure GNANI_API_KEY to synthesize audio.');
+    error.status = 503;
+    throw error;
   }
 
   const normalizedPayload = {
@@ -163,6 +158,23 @@ export async function synthesizeSpeech(ttsPayload) {
   );
 }
 
+export function getCachedSpeechStatus(payloads = []) {
+  return payloads.map((payload) => {
+    const normalized = {
+      text: String(payload.text || '').trim(),
+      voice: payload.voice || 'Devika',
+      model: payload.model || 'timbre-v2.5',
+      language: payload.language || 'en-IN',
+      speed: Number.isFinite(Number(payload.speed)) ? Number(payload.speed) : 1,
+      audio_config: payload.audio_config || {
+        sample_rate: 24000, num_channels: 1, sample_width: 2, encoding: 'linear_pcm', container: 'wav',
+      },
+    };
+    const key = createHash('sha1').update(JSON.stringify(normalized)).digest('hex');
+    return ttsMemoryCache.has(key);
+  });
+}
+
 /**
  * Transcribe speech audio via Gnani STT API (multipart/form-data)
  * @param {Buffer} rawAudioBuffer - raw multipart or WAV buffer
@@ -171,13 +183,9 @@ export async function synthesizeSpeech(ttsPayload) {
  */
 export async function transcribeSpeech(rawAudioBuffer, contentType) {
   if (!config.isKeyConfigured()) {
-    console.warn('[GnaniService] GNANI_API_KEY is not configured in .env. Returning mock transcription.');
-    const mockResult = getMockTranscription();
-    return {
-      transcript: mockResult.transcript,
-      detected_language_code: mockResult.detected_language_code,
-      isMock: true,
-    };
+    const error = new Error('Gnani voice is not connected. Configure GNANI_API_KEY to transcribe audio.');
+    error.status = 503;
+    throw error;
   }
 
   // Identical upload fired twice → one Gnani call.

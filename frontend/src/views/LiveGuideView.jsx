@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { synthesize, getNoMatchMessage, getMicDeniedMessage, getCameraDeniedMessage, getEmptyTranscriptMessage, transcribe, localeToLangCode } from '../lib/gnaniClient';
 import { createMicRecorder } from '../lib/micRecorder';
 import { matchQuestion } from '../lib/qaMatch';
+import { getTranslatedQuestions } from '../data/translations';
 
 /**
  * LiveGuideView — camera view with voice Q&A (push-to-talk).
@@ -25,8 +26,11 @@ export default function LiveGuideView({ monument, userLanguage = 'en', onClose, 
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const micRecorderRef = useRef(null);
+  const micHeldRef = useRef(false);
   const audioElRef = useRef(null); // for playing Gnani TTS answers
   const ttsAbortRef = useRef(null); // aborts a queued/in-flight Gnani TTS answer
+  const voiceRequestRef = useRef(null);
+  const timedOutRef = useRef(false);
 
   const videoRef = useRef(null);
 
@@ -78,7 +82,8 @@ export default function LiveGuideView({ monument, userLanguage = 'en', onClose, 
     ];
   };
 
-  const questions = getDynamicQuestions(monument);
+  const questions = (monument?.id === 'humayun-tomb' && getTranslatedQuestions(monument.id, userLanguage))
+    || getDynamicQuestions(monument);
 
   // ─── Set initial response on mount ─────────────────────────────────
   useEffect(() => {
@@ -131,6 +136,7 @@ export default function LiveGuideView({ monument, userLanguage = 'en', onClose, 
         ttsAbortRef.current.abort();
         ttsAbortRef.current = null;
       }
+      if (voiceRequestRef.current) voiceRequestRef.current.abort();
     };
   }, []);
 
@@ -138,8 +144,18 @@ export default function LiveGuideView({ monument, userLanguage = 'en', onClose, 
   const speakAnswer = async (text, langCode) => {
     // A newer answer cancels narration that is still queued or in flight.
     if (ttsAbortRef.current) ttsAbortRef.current.abort();
+    if (audioElRef.current) {
+      audioElRef.current.pause();
+      audioElRef.current = null;
+    }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
     const controller = new AbortController();
     ttsAbortRef.current = controller;
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 30_000);
 
     setIsSpeaking(true);
     try {
@@ -154,35 +170,25 @@ export default function LiveGuideView({ monument, userLanguage = 'en', onClose, 
         setActiveQuestionIdx(null);
       };
       audio.onerror = () => {
-        // Fall back to Web Speech
-        fallbackSpeak(text, langCode);
+        if (controller.signal.aborted) return;
+        setIsSpeaking(false);
+        setAiSpeechResponse('Gnani audio could not be played. Please try again.');
       };
       await audio.play();
     } catch (err) {
-      if (controller.signal.aborted || err?.name === 'AbortError') return;
-      console.warn('Gnani TTS failed for answer, using Web Speech:', err.message);
-      fallbackSpeak(text, langCode);
-    }
-  };
-
-  const fallbackSpeak = (text, langCode) => {
-    if (!window.speechSynthesis) {
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        if (timedOut) {
+          setIsSpeaking(false);
+          setAiSpeechResponse('Gnani is taking too long to speak the answer. Please try again.');
+        }
+        return;
+      }
+      console.warn('Gnani TTS failed for answer:', err.message);
       setIsSpeaking(false);
-      return;
+      setAiSpeechResponse('Gnani voice is unavailable right now. Your answer is shown above.');
+    } finally {
+      window.clearTimeout(timeout);
     }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
-    const langPrefix = langCode === 'hi' ? 'hi' : langCode === 'ta' ? 'ta' : langCode === 'bn' ? 'bn' : 'en';
-    const voice = voices.find((v) => v.lang.includes(langPrefix)) ||
-                  voices.find((v) => v.lang.includes('en'));
-    if (voice) utterance.voice = voice;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      setActiveQuestionIdx(null);
-    };
-    window.speechSynthesis.speak(utterance);
   };
 
   // ─── Handle chip question tap (existing behavior, now with Gnani TTS) ─
@@ -212,13 +218,20 @@ export default function LiveGuideView({ monument, userLanguage = 'en', onClose, 
   // ─── Push-to-talk: start recording ──────────────────────────────────
   const handleStartRecording = async () => {
     if (isRecording || isProcessing || isSpeaking) return;
+    micHeldRef.current = true;
 
     try {
       const recorder = createMicRecorder();
       micRecorderRef.current = recorder;
       await recorder.start();
+      if (!micHeldRef.current) {
+        recorder.cleanup();
+        micRecorderRef.current = null;
+        return;
+      }
       setIsRecording(true);
     } catch (err) {
+      micHeldRef.current = false;
       console.warn('Mic access denied:', err);
       const msg = getMicDeniedMessage(userLanguage);
       setAiSpeechResponse(msg);
@@ -226,12 +239,30 @@ export default function LiveGuideView({ monument, userLanguage = 'en', onClose, 
     }
   };
 
+  const handleMicPointerDown = (event) => {
+    event.preventDefault();
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Some embedded/headless browsers do not support pointer capture.
+    }
+    handleStartRecording();
+  };
+
   // ─── Push-to-talk: stop recording and process ───────────────────────
   const handleStopRecording = async () => {
-    if (!isRecording || !micRecorderRef.current) return;
+    micHeldRef.current = false;
+    if (!micRecorderRef.current?.getIsRecording()) return;
 
     setIsRecording(false);
     setIsProcessing(true);
+    const controller = new AbortController();
+    voiceRequestRef.current = controller;
+    timedOutRef.current = false;
+    const timeout = window.setTimeout(() => {
+      timedOutRef.current = true;
+      controller.abort();
+    }, 30_000);
 
     try {
       const wavBlob = await micRecorderRef.current.stop();
@@ -239,7 +270,11 @@ export default function LiveGuideView({ monument, userLanguage = 'en', onClose, 
       micRecorderRef.current = null;
 
       // Transcribe with Gnani STT
-      const { transcript, detectedLanguage } = await transcribe(wavBlob);
+      if (!wavBlob.size) {
+        setAiSpeechResponse('No speech was recorded. Hold the mic and try again.');
+        return;
+      }
+      const { transcript, detectedLanguage } = await transcribe(wavBlob, { signal: controller.signal });
 
       if (!transcript || !transcript.trim()) {
         const msg = getEmptyTranscriptMessage(userLanguage);
@@ -269,9 +304,14 @@ export default function LiveGuideView({ monument, userLanguage = 'en', onClose, 
       }
     } catch (err) {
       console.error('Voice Q&A error:', err);
-      const errMsg = getNoMatchMessage(userLanguage);
+      if (controller.signal.aborted && !timedOutRef.current) return;
+      const errMsg = timedOutRef.current
+        ? 'Gnani is taking too long. Please try your question again.'
+        : 'Gnani could not process that recording. Check the connection and try again.';
       setAiSpeechResponse(errMsg);
     } finally {
+      window.clearTimeout(timeout);
+      if (voiceRequestRef.current === controller) voiceRequestRef.current = null;
       setIsProcessing(false);
     }
   };
@@ -438,10 +478,9 @@ export default function LiveGuideView({ monument, userLanguage = 'en', onClose, 
           {/* Push-to-talk mic button */}
           <div className="flex items-center gap-3">
             <button
-              onMouseDown={handleStartRecording}
-              onMouseUp={handleStopRecording}
-              onTouchStart={handleStartRecording}
-              onTouchEnd={handleStopRecording}
+              onPointerDown={handleMicPointerDown}
+              onPointerUp={handleStopRecording}
+              onPointerCancel={handleStopRecording}
               disabled={isProcessing || isSpeaking}
               className={`p-4 rounded-full transition-all transform active:scale-95 shadow-lg flex items-center justify-center shrink-0 ${
                 isRecording
